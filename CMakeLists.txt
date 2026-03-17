@@ -12,7 +12,11 @@ set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/asio/include)
 include_directories(src/include websocketpp/)
+
+add_definitions(-DASIO_STANDALONE)
+add_definitions(-D_WEBSOCKETPP_CPP11_STL_)
 
 set(EXTENSION_SOURCES src/rpc_extension.cpp src/server.cpp src/message.cpp src/client.cpp src/rpc_scan_function.cpp src/rpc_start_function.cpp src/rpc_storage_extension.cpp src/ssl_key_generator.cpp src/catalog.cpp src/rpc_insert.cpp)
 
