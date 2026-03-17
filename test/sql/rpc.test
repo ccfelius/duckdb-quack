@@ -7,11 +7,11 @@ require rpc
 statement ok
 call rpc_generate_keys();
 
+# wss -> is the websocket rcp server
 foreach server  '__TEST_DIR__/duckdb-rpc-socket' 'wss://localhost:1294'
 
 statement ok con1
 call rpc_start(${server});
-
 
 sleep 100 millisecond
 

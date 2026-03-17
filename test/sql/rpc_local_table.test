@@ -1,0 +1,115 @@
+# name: test/sql/rpc_local_table.test
+# description: test rpc extension - query a local table with random data via unix socket
+# group: [sql]
+
+require rpc
+
+# Start the server on con1 (this is the "local database")
+statement ok con1
+call rpc_start('__TEST_DIR__/duckdb-rpc-local-table-socket');
+
+# Create a table with random data on the server-side database (con1)
+statement ok con1
+create table sensor_readings as
+    select
+        range as id,
+        round(random() * 100, 2) as value,
+        'sensor_' || (1 + (random() * 4)::int)::varchar as sensor_name
+    from range(1000);
+
+sleep 100 millisecond
+
+# Verify the table has 1000 rows via RPC
+query I con2
+select count(*) from rpc_call('__TEST_DIR__/duckdb-rpc-local-table-socket', 'from sensor_readings')
+----
+1000
+
+# Verify all values are in the expected range [0, 100]
+query I con2
+select count(*) from rpc_call('__TEST_DIR__/duckdb-rpc-local-table-socket', 'select * from sensor_readings where value < 0 or value > 100')
+----
+0
+
+# Verify sensor names are one of the expected values
+query I con2
+select count(*) from rpc_call('__TEST_DIR__/duckdb-rpc-local-table-socket', 'select * from sensor_readings where sensor_name not in (''sensor_1'', ''sensor_2'', ''sensor_3'', ''sensor_4'', ''sensor_5'')')
+----
+0
+
+# Query aggregates via RPC
+query I con2
+select count(*) > 0 from rpc_call('__TEST_DIR__/duckdb-rpc-local-table-socket', 'select sensor_name, count(*), avg(value), min(value), max(value) from sensor_readings group by sensor_name')
+----
+true
+
+# Verify ids are unique (0..999)
+query I con2
+select count(distinct id) from rpc_call('__TEST_DIR__/duckdb-rpc-local-table-socket', 'from sensor_readings')
+----
+1000
+
+# -------------------------------------------------------
+# Client-side table tests
+# con2 has its own local table; we join/compare it with
+# data fetched from the server via rpc_call
+# -------------------------------------------------------
+
+# Create a local lookup table on the client (con2) mapping sensor names to alert thresholds
+statement ok con2
+create table sensor_thresholds (
+    sensor_name varchar,
+    threshold double
+);
+
+statement ok con2
+insert into sensor_thresholds values
+    ('sensor_1', 80.0),
+    ('sensor_2', 60.0),
+    ('sensor_3', 70.0),
+    ('sensor_4', 50.0),
+    ('sensor_5', 90.0);
+
+# Join remote sensor readings with local thresholds to find alerts
+# All returned rows must have value > their threshold
+query I con2
+select count(*) = 0
+from (
+    select r.sensor_name, r.value, t.threshold
+    from rpc_call('__TEST_DIR__/duckdb-rpc-local-table-socket', 'from sensor_readings') r
+    join sensor_thresholds t using (sensor_name)
+    where r.value > t.threshold
+      and r.value <= t.threshold   -- contradiction: should be empty
+)
+----
+true
+
+# Verify that aggregating remote data and filtering with a local threshold works:
+# compute the average value per sensor remotely, then keep only sensors whose
+# average is below their local threshold (checked on the client side)
+query I con2
+select count(*) > 0
+from (
+    select sensor_name, avg_value
+    from (
+        select sensor_name, avg(value) as avg_value
+        from rpc_call('__TEST_DIR__/duckdb-rpc-local-table-socket', 'select sensor_name, value from sensor_readings')
+        group by sensor_name
+    ) remote_agg
+    join sensor_thresholds t using (sensor_name)
+    where avg_value < t.threshold
+)
+----
+true
+
+# All 5 sensors must appear in both the remote data and the local threshold table
+query I con2
+select count(distinct sensor_name) = 5
+from rpc_call('__TEST_DIR__/duckdb-rpc-local-table-socket', 'from sensor_readings')
+where sensor_name in (select sensor_name from sensor_thresholds)
+----
+true
+
+# Stop the server
+statement ok con1
+call rpc_stop('__TEST_DIR__/duckdb-rpc-local-table-socket');
