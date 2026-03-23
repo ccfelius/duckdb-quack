@@ -29,6 +29,8 @@ string duckdb::MessageTypeToString(MessageType type) {
 		return "APPEND_REQUEST";
 	case MessageType::APPEND_RESPONSE:
 		return "APPEND_RESPONSE";
+	case MessageType::FORWARD_REQUEST:
+		return "FORWARD_REQUEST";
 	case MessageType::ERROR:
 		return "ERROR";
 	case MessageType::INVALID:
@@ -110,6 +112,8 @@ unique_ptr<ProtocolMessage> ProtocolMessage::Deserialize(Deserializer &deseriali
 		return AppendRequestMessage::Deserialize(deserializer);
 	case MessageType::APPEND_RESPONSE:
 		return AppendResponseMessage::Deserialize(deserializer);
+	case MessageType::FORWARD_REQUEST:
+		return ForwardRequestMessage::Deserialize(deserializer);
 	case MessageType::ERROR:
 		return ErrorMessage::Deserialize(deserializer);
 	default:
@@ -161,6 +165,18 @@ unique_ptr<ProtocolMessage> PrepareResponseMessage::Deserialize(Deserializer &de
 	auto result_names = deserializer.ReadProperty<vector<string>>(211, "result_names");
 	auto estimated_cardinality = deserializer.ReadProperty<optional_idx>(212, "estimated_cardinality");
 	return make_uniq<PrepareResponseMessage>(std::move(result_types), std::move(result_names), estimated_cardinality);
+}
+
+void ForwardRequestMessage::Serialize(Serializer &serializer) const {
+	ProtocolMessage::Serialize(serializer);
+	serializer.WriteProperty<string>(98, "connection_id", connection_id);
+
+	// 240
+}
+
+unique_ptr<ProtocolMessage> ForwardRequestMessage::Deserialize(Deserializer &deserializer) {
+	auto connection_id = deserializer.ReadProperty<string>(98, "connection_id");
+	return make_uniq<FetchRequestMessage>(connection_id);
 }
 
 void FetchRequestMessage::Serialize(Serializer &serializer) const {

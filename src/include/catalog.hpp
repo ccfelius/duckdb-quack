@@ -9,6 +9,8 @@
 #include "duckdb/transaction/transaction_manager.hpp"
 #include "duckdb/catalog/default/default_table_functions.hpp"
 
+
+
 namespace duckdb {
 
 class RpcCatalog;
@@ -139,6 +141,7 @@ public:
 	unique_ptr<ColumnDataCollection> ExecuteCommand(const string &query);
 	const string &GetServerString();
 	const string &GetConnectionId();
+	const string &GetClientIdString() const;
 
 	RpcClient &GetRawClient();
 
@@ -148,6 +151,8 @@ private:
 	unique_ptr<RpcClient> client;
 	string connection_id;
 	unordered_map<string, unique_ptr<RpcSchemaCatalogEntry>> schemas;
+
+	string client_id;
 };
 
 } // namespace duckdb

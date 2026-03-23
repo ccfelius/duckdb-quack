@@ -38,6 +38,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	loader.SetDescription("Adds support for DuckDB Remote Procedure Calls (RPC)");
 
 	loader.RegisterFunction(RpcScanFunction::GetFunction());
+	loader.RegisterFunction(RpcOrchestrateFunction::GetFunction());
 	loader.RegisterFunction(RpcScanByNameFunction::GetFunction());
 
 	loader.RegisterFunction(RpcStartFunction::GetFunction());

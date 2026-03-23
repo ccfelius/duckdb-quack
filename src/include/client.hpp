@@ -14,7 +14,7 @@ public:
 	explicit RpcClient(const string &uri_p) : uri(uri_p) {};
 	template <class TARGET>
 	unique_ptr<TARGET> MakeRequest(unique_ptr<ProtocolMessage> request_message) {
-		//	printf("C SEND %s\n", MessageTypeToString(request_message->Type()).c_str());
+		printf("C SEND %s\n", MessageTypeToString(request_message->Type()).c_str());
 		Send(std::move(request_message));
 		auto response_message = WaitForMessageInternal(TARGET::TYPE).release();
 		//	printf("C RECV %s\n", MessageTypeToString(response_message->Type()).c_str());

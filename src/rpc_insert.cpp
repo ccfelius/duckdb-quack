@@ -49,6 +49,13 @@ public:
 };
 
 unique_ptr<GlobalSinkState> RpcInsert::GetGlobalSinkState(ClientContext &context) const {
+	if (!table.get()) {
+		if (!schema.get()) {
+			throw NotImplementedException("NO table and schema found");
+		}
+
+		return make_uniq<RpcInsertGlobalState>(context, schema.get_mutable()->Cast<RpcTableCatalogEntry>());
+	}
 	return make_uniq<RpcInsertGlobalState>(context, table.get_mutable()->Cast<RpcTableCatalogEntry>());
 }
 

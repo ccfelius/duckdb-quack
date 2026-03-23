@@ -271,6 +271,11 @@ unique_ptr<ProtocolMessage> RpcServer::HandleMessage(ProtocolMessage &received_m
 		return make_uniq<PrepareResponseMessage>(statement->GetTypes(), statement->GetNames(), estimated_cardinality);
 	}
 
+	case MessageType::FORWARD_REQUEST: {
+		// TODO; GET the sql query
+
+	}
+
 	case MessageType::FETCH_REQUEST: {
 		auto &fetch_request_message = received_message.Cast<FetchRequestMessage>();
 		optional_ptr<RpcConnection> rpc_connection = GetConnection(fetch_request_message.ConnectionId());

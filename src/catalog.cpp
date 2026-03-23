@@ -114,6 +114,10 @@ const string &RpcCatalog::GetServerString() {
 	return server_string;
 }
 
+const string &RpcCatalog::GetClientIdString() const {
+	return client_id;
+}
+
 unique_ptr<ColumnDataCollection> RpcCatalog::ExecuteCommand(const string &query) {
 	auto chunk_collection = make_uniq<ColumnDataCollection>(Allocator::DefaultAllocator());
 	auto response =

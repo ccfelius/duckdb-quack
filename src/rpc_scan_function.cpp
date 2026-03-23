@@ -159,3 +159,4 @@ TableFunction RpcScanByNameFunction::GetFunction() {
 	return TableFunction("rpc_call_by_name", {LogicalType::VARCHAR, LogicalType::VARCHAR}, RpcScan, RpcBindCatalogName,
 	                     RpcInitGlobal, RpcInitLocal);
 }
+

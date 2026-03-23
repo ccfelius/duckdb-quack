@@ -19,6 +19,7 @@ enum class MessageType : uint8_t {
 	CATALOG_RESPONSE = 10,
 	APPEND_REQUEST = 11,
 	APPEND_RESPONSE = 12,
+	FORWARD_REQUEST = 13,
 	ERROR = 100
 };
 
@@ -144,6 +145,22 @@ public:
 	}
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
+
+private:
+	string connection_id;
+};
+
+class ForwardRequestMessage : public ProtocolMessage {
+public:
+	static constexpr MessageType TYPE = MessageType::FORWARD_REQUEST;
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
+
+	const std::string &ConnectionId() const {
+		return connection_id;
+	}
+	explicit ForwardRequestMessage(const string &connection_id_p)
+	    : ProtocolMessage(TYPE), connection_id(connection_id_p) {};
 
 private:
 	string connection_id;
