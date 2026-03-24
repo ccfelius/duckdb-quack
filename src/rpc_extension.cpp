@@ -7,6 +7,7 @@
 #include "rpc_start_function.hpp"
 #include "rpc_storage_extension.hpp"
 
+#include "duckdb/main/connection.hpp"
 #include "duckdb/storage/storage_extension.hpp"
 #include "duckdb/catalog/default/default_table_functions.hpp"
 

@@ -19,7 +19,11 @@ enum class MessageType : uint8_t {
 	CATALOG_RESPONSE = 10,
 	APPEND_REQUEST = 11,
 	APPEND_RESPONSE = 12,
-	FORWARD_REQUEST = 13,
+	ORCHESTRATE_REQUEST = 13,
+	FORWARD_PREPARE_REQUEST = 14,
+	FORWARD_PREPARE_RESPONSE = 15,
+	FORWARD_FETCH_REQUEST = 16,
+	FORWARD_FETCH_RESPONSE = 17,
 	ERROR = 100
 };
 
@@ -121,6 +125,54 @@ private:
 	optional_idx estimated_cardinality;
 };
 
+class ForwardPrepareRequestMessage : public ProtocolMessage {
+public:
+	static constexpr MessageType TYPE = MessageType::FORWARD_PREPARE_REQUEST;
+
+	ForwardPrepareRequestMessage(unique_ptr<PrepareRequestMessage> base_request_p,
+				     string compute_conn_id_p)
+	    : ProtocolMessage(TYPE),
+	      prepare_request(std::move(base_request_p)),
+	      compute_conn_id(std::move(compute_conn_id_p)) {
+	}
+
+	// This is the only function you need to access the original data
+	const PrepareRequestMessage& GetRequest() const { return *prepare_request; }
+
+	const string& ComputeConnectionId() const { return compute_conn_id; }
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
+
+private:
+	unique_ptr<PrepareRequestMessage> prepare_request;
+	string compute_conn_id;
+};
+
+class ForwardPrepareResponseMessage : public ProtocolMessage {
+public:
+	static constexpr MessageType TYPE = MessageType::FORWARD_PREPARE_RESPONSE;
+
+	ForwardPrepareResponseMessage(unique_ptr<PrepareResponseMessage> base_response_p,
+				      string client_connection_id_p)
+	    : ProtocolMessage(TYPE),
+	      prepare_response(std::move(base_response_p)),
+	      client_connection_id(std::move(client_connection_id_p)) {
+	}
+
+	// Accessor for the original response data
+	const PrepareResponseMessage& GetResponse() const { return *prepare_response; }
+
+	const string& ClientConnectionId() const { return client_connection_id; }
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
+
+private:
+	unique_ptr<PrepareResponseMessage> prepare_response;
+	string client_connection_id;
+};
+
 // TODO this is where auth goes
 class ConnectionRequestMessage : public ProtocolMessage {
 public:
@@ -150,20 +202,55 @@ private:
 	string connection_id;
 };
 
-class ForwardRequestMessage : public ProtocolMessage {
+class OrchestrateRequestMessage : public ProtocolMessage {
 public:
-	static constexpr MessageType TYPE = MessageType::FORWARD_REQUEST;
+	static constexpr MessageType TYPE = MessageType::ORCHESTRATE_REQUEST;
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
 
 	const std::string &ConnectionId() const {
-		return connection_id;
+		return client_connection_id;
 	}
-	explicit ForwardRequestMessage(const string &connection_id_p)
-	    : ProtocolMessage(TYPE), connection_id(connection_id_p) {};
+	explicit OrchestrateRequestMessage(const string &connection_id_p, const string &sql_query_p)
+	    : ProtocolMessage(TYPE), client_connection_id(connection_id_p), sql_query(sql_query_p) {};
+
+	const string &Query() const {
+		return sql_query;
+	}
+private:
+	string client_connection_id;
+	string sql_query;
+	// string metadata;
+};
+
+// Todo, this is just PrepareResponseMessage + is_avail
+class OrchestrateResponseMessage : public ProtocolMessage {
+public:
+	static constexpr MessageType TYPE = MessageType::FETCH_RESPONSE;
+
+	explicit OrchestrateResponseMessage(const vector<LogicalType> &types_p, const vector<string> &names_p,
+			       optional_idx estimated_cardinality_p)
+	    : ProtocolMessage(TYPE), result_types(types_p), result_names(names_p),
+	  estimated_cardinality(estimated_cardinality_p) {};
+
+	const vector<LogicalType> &Types() const {
+		return result_types;
+	}
+
+	const vector<string> &Names() const {
+		return result_names;
+	}
+	optional_idx EstimatedCardinality() const {
+		return estimated_cardinality;
+	}
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
 
 private:
-	string connection_id;
+	vector<LogicalType> result_types;
+	vector<string> result_names;
+	optional_idx estimated_cardinality;
 };
 
 class FetchRequestMessage : public ProtocolMessage {
@@ -199,6 +286,54 @@ public:
 
 private:
 	unique_ptr<DataChunk> response_data;
+};
+
+class ForwardFetchRequestMessage : public ProtocolMessage {
+public:
+	static constexpr MessageType TYPE = MessageType::FORWARD_FETCH_REQUEST;
+
+	ForwardFetchRequestMessage(unique_ptr<FetchRequestMessage> base_request_p,
+				   string compute_conn_id_p)
+	    : ProtocolMessage(TYPE),
+	      fetch_request(std::move(base_request_p)),
+	      compute_conn_id(std::move(compute_conn_id_p)) {
+	}
+
+	// Accessor for the original request
+	const FetchRequestMessage& GetRequest() const { return *fetch_request; }
+
+	const string& ComputeConnectionId() const { return compute_conn_id; }
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
+
+private:
+	unique_ptr<FetchRequestMessage> fetch_request;
+	string compute_conn_id;
+};
+
+class ForwardFetchResponseMessage : public ProtocolMessage {
+public:
+	static constexpr MessageType TYPE = MessageType::FORWARD_FETCH_RESPONSE;
+
+	ForwardFetchResponseMessage(unique_ptr<FetchResponseMessage> base_response_p,
+				    string client_connection_id_p)
+	    : ProtocolMessage(TYPE),
+	      fetch_response(std::move(base_response_p)),
+	      client_connection_id(std::move(client_connection_id_p)) {
+	}
+
+	// Accessor for the original response
+	const FetchResponseMessage& GetResponse() const { return *fetch_response; }
+
+	const string& ClientConnectionId() const { return client_connection_id; }
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
+
+private:
+	unique_ptr<FetchResponseMessage> fetch_response;
+	string client_connection_id;
 };
 
 // orrr
@@ -310,5 +445,7 @@ private:
 	ErrorMessage() : ProtocolMessage(TYPE) {};
 	string error_message;
 };
+
+
 
 } // namespace duckdb

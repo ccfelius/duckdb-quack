@@ -29,8 +29,8 @@ string duckdb::MessageTypeToString(MessageType type) {
 		return "APPEND_REQUEST";
 	case MessageType::APPEND_RESPONSE:
 		return "APPEND_RESPONSE";
-	case MessageType::FORWARD_REQUEST:
-		return "FORWARD_REQUEST";
+	case MessageType::ORCHESTRATE_REQUEST:
+		return "ORCHESTRATE_REQUEST";
 	case MessageType::ERROR:
 		return "ERROR";
 	case MessageType::INVALID:
@@ -112,8 +112,8 @@ unique_ptr<ProtocolMessage> ProtocolMessage::Deserialize(Deserializer &deseriali
 		return AppendRequestMessage::Deserialize(deserializer);
 	case MessageType::APPEND_RESPONSE:
 		return AppendResponseMessage::Deserialize(deserializer);
-	case MessageType::FORWARD_REQUEST:
-		return ForwardRequestMessage::Deserialize(deserializer);
+	case MessageType::ORCHESTRATE_REQUEST:
+		return OrchestrateRequestMessage::Deserialize(deserializer);
 	case MessageType::ERROR:
 		return ErrorMessage::Deserialize(deserializer);
 	default:
@@ -165,18 +165,6 @@ unique_ptr<ProtocolMessage> PrepareResponseMessage::Deserialize(Deserializer &de
 	auto result_names = deserializer.ReadProperty<vector<string>>(211, "result_names");
 	auto estimated_cardinality = deserializer.ReadProperty<optional_idx>(212, "estimated_cardinality");
 	return make_uniq<PrepareResponseMessage>(std::move(result_types), std::move(result_names), estimated_cardinality);
-}
-
-void ForwardRequestMessage::Serialize(Serializer &serializer) const {
-	ProtocolMessage::Serialize(serializer);
-	serializer.WriteProperty<string>(98, "connection_id", connection_id);
-
-	// 240
-}
-
-unique_ptr<ProtocolMessage> ForwardRequestMessage::Deserialize(Deserializer &deserializer) {
-	auto connection_id = deserializer.ReadProperty<string>(98, "connection_id");
-	return make_uniq<FetchRequestMessage>(connection_id);
 }
 
 void FetchRequestMessage::Serialize(Serializer &serializer) const {
@@ -299,3 +287,32 @@ void AppendResponseMessage::Serialize(Serializer &serializer) const {
 unique_ptr<ProtocolMessage> AppendResponseMessage::Deserialize(Deserializer &deserializer) {
 	return make_uniq<AppendResponseMessage>();
 }
+
+void OrchestrateRequestMessage::Serialize(Serializer &serializer) const {
+	ProtocolMessage::Serialize(serializer);
+	serializer.WriteProperty<string>(98, "connection_id", client_connection_id);
+	serializer.WriteProperty<string>(200, "sql_query", sql_query);
+	// 240
+}
+
+unique_ptr<ProtocolMessage> OrchestrateRequestMessage::Deserialize(Deserializer &deserializer) {
+	auto connection_id = deserializer.ReadProperty<string>(98, "connection_id");
+	auto sql_query = deserializer.ReadProperty<string>(200, "sql_query");
+	return make_uniq<OrchestrateRequestMessage>(connection_id, sql_query);
+}
+
+void OrchestrateResponseMessage::Serialize(Serializer &serializer) const {
+	ProtocolMessage::Serialize(serializer);
+	serializer.WriteProperty<vector<LogicalType>>(210, "result_types", result_types);
+	serializer.WriteProperty<vector<string>>(211, "result_names", result_names);
+	serializer.WriteProperty<optional_idx>(212, "estimated_cardinality", estimated_cardinality);
+}
+
+unique_ptr<ProtocolMessage> OrchestrateResponseMessage::Deserialize(Deserializer &deserializer) {
+	auto result_types = deserializer.ReadProperty<vector<LogicalType>>(210, "result_types");
+	auto result_names = deserializer.ReadProperty<vector<string>>(211, "result_names");
+	auto estimated_cardinality = deserializer.ReadProperty<optional_idx>(212, "estimated_cardinality");
+	return make_uniq<OrchestrateResponseMessage>(std::move(result_types), std::move(result_names), estimated_cardinality);
+}
+
+// TODO implement FETCH OrchestrateFetchRequest & Response

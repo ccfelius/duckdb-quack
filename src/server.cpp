@@ -1,6 +1,7 @@
 #include "server.hpp"
 #include "message.hpp"
 #include "ssl_key_generator.hpp"
+#include "client.hpp"
 
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/connection.hpp"
@@ -9,7 +10,12 @@
 
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "duckdb/parser/statement/create_statement.hpp"
+#include "duckdb/planner/expression/bound_constant_expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include "duckdb/planner/binder.hpp"
+
+#include <duckdb/execution/expression_executor.hpp>
 
 using namespace duckdb;
 
@@ -217,6 +223,107 @@ void WebSocketRpcServer::Listen(const string &listen_string_p) {
 	}
 }
 
+LogicalType GetOrchestratorInfoStructFormat() {
+	child_list_t<LogicalType> struct_children;
+
+	struct_children.emplace_back("request_id",  LogicalType::VARCHAR);
+	struct_children.emplace_back("query",        LogicalType::VARCHAR);
+	struct_children.emplace_back("server_name",  LogicalType::VARCHAR);
+	struct_children.emplace_back("server_uri",   LogicalType::VARCHAR);
+	struct_children.emplace_back("result",       LogicalType::VARCHAR);
+	auto input_struct_type = LogicalType::STRUCT(std::move(struct_children));
+	return input_struct_type;
+}
+
+Value InitializeOrchestratorInfoStruct(const string &query) {
+		auto struct_type = GetOrchestratorInfoStructFormat();
+
+		vector<Value> struct_values;
+		struct_values.push_back(Value(rand())); // request_id
+		struct_values.push_back(Value(query));         // query
+		struct_values.push_back(Value(nullptr));                // server_name
+		struct_values.push_back(Value(nullptr));          // server_uri
+		struct_values.push_back(Value(nullptr));                // result
+
+		return Value::STRUCT(struct_type, std::move(struct_values));
+}
+
+unique_ptr<ScalarFunction> RcpGetOrchestrateCallbackFunc(ClientContext &context) {
+	auto callback = Catalog::GetEntry<ScalarFunctionCatalogEntry>(
+	   context, INVALID_CATALOG, DEFAULT_SCHEMA, "orchestrate", OnEntryNotFound::RETURN_NULL);
+	if (!callback) {
+		throw InvalidInputException("No 'orchestrate' function registered in the catalog. You must configure an external orchestrate function");
+	}
+
+	return make_uniq<ScalarFunction>(callback->functions.GetFunctionByArguments(context, {GetOrchestratorInfoStructFormat()}));
+}
+
+
+
+static unique_ptr<BoundFunctionExpression> RcpGetBoundOrchestrateCallback(unique_ptr<ScalarFunction> &callback_func, const string &query) {
+	// TODO; move this out of this function
+	auto orchestrator_info_struct = InitializeOrchestratorInfoStruct(query);
+
+	// push the input arguments
+	vector<unique_ptr<Expression>> children;
+	children.push_back(make_uniq<BoundConstantExpression>(orchestrator_info_struct));
+
+	return make_uniq<BoundFunctionExpression>(callback_func->return_type, *callback_func, std::move(children), nullptr);
+}
+
+unique_ptr<ProtocolMessage> RpcServer::HandleOrchestrateRequest(ProtocolMessage &received_message) {
+	auto &orchestrate_request_message = received_message.Cast<OrchestrateRequestMessage>();
+	auto &query = orchestrate_request_message.Query();
+
+	optional_ptr<RpcConnection> rpc_connection = GetConnection(orchestrate_request_message.ConnectionId());
+	if (!rpc_connection) {
+		return make_uniq<ErrorMessage>("Invalid connection id");
+	}
+
+	// Locks and resets the connection
+	// std::unique_lock<std::mutex> lock(rpc_connection->lock);
+	// rpc_connection->duckdb_query_result.reset();
+	//
+	// // ExecuteQuery()
+	// auto statement = rpc_connection->duckdb_connection->Prepare(orchestrate_request_message.Query());
+	// if (statement->HasError()) {
+	// 	return make_uniq<ErrorMessage>(statement->GetError());
+	// }
+
+	// Resolve the matching overload and invoke it directly
+	auto callback_bind_data = RcpGetOrchestrateCallbackFunc(*rpc_connection->duckdb_connection->context);
+	auto bound_expr = RcpGetBoundOrchestrateCallback(callback_bind_data, query);
+	auto result_value = ExpressionExecutor::EvaluateScalar(*rpc_connection->duckdb_connection->context, *bound_expr);
+
+	//TODO; deserialize the result struct of the orchestrator callback
+
+	//! we only deserialize the minimum here right now
+	auto &children = StructValue::GetChildren(result_value);
+	const string &server_uri = children[2].ToString();
+
+	D_ASSERT(!server_uri.empty());
+
+
+	// use the server id (or connection id (?)) to connect with the worker node
+	// TODO; maybe create a mapping; server_id -> available connections
+
+	// TODO; with server id, issue a new connection request
+	auto client = RpcClient::GetClient(server_uri);
+	auto connection_request_response =
+	client->MakeRequest<ConnectionResponseMessage>(make_uniq<ConnectionRequestMessage>());
+	auto connection_id = connection_request_response->ConnectionId();
+
+	// TODO; send prepare (forward)
+	auto bind_response = client->MakeRequest<PrepareResponseMessage>(
+	make_uniq<PrepareRequestMessage>(connection_id, query, true));
+
+	// TODO; send fetch (forward)
+
+
+
+
+	return nullptr;
+}
 // main switcheroo happens here
 unique_ptr<ProtocolMessage> RpcServer::HandleMessage(ProtocolMessage &received_message) {
 	switch (received_message.Type()) {
@@ -231,6 +338,7 @@ unique_ptr<ProtocolMessage> RpcServer::HandleMessage(ProtocolMessage &received_m
 		if (!rpc_connection) {
 			return make_uniq<ErrorMessage>("Invalid connection id");
 		}
+
 		std::unique_lock<std::mutex> lock(rpc_connection->lock);
 		rpc_connection->duckdb_query_result.reset();
 		auto statement = rpc_connection->duckdb_connection->Prepare(prepare_request_message.Query());
@@ -271,9 +379,9 @@ unique_ptr<ProtocolMessage> RpcServer::HandleMessage(ProtocolMessage &received_m
 		return make_uniq<PrepareResponseMessage>(statement->GetTypes(), statement->GetNames(), estimated_cardinality);
 	}
 
-	case MessageType::FORWARD_REQUEST: {
-		// TODO; GET the sql query
-
+	// checks if
+	case MessageType::ORCHESTRATE_REQUEST: {
+		return HandleOrchestrateRequest(received_message);
 	}
 
 	case MessageType::FETCH_REQUEST: {

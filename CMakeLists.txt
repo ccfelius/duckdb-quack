@@ -18,7 +18,7 @@ include_directories(src/include websocketpp/)
 add_definitions(-DASIO_STANDALONE)
 add_definitions(-D_WEBSOCKETPP_CPP11_STL_)
 
-set(EXTENSION_SOURCES src/rpc_extension.cpp src/server.cpp src/message.cpp src/client.cpp src/rpc_scan_function.cpp src/rpc_start_function.cpp src/rpc_storage_extension.cpp src/ssl_key_generator.cpp src/catalog.cpp src/rpc_insert.cpp)
+set(EXTENSION_SOURCES src/rpc_extension.cpp src/server.cpp src/message.cpp src/client.cpp src/rpc_scan_function.cpp src/rpc_start_function.cpp src/rpc_storage_extension.cpp src/ssl_key_generator.cpp src/catalog.cpp src/rpc_insert.cpp src/rpc_orchestrate_function.cpp)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})

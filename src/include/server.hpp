@@ -46,6 +46,7 @@ public:
 
 protected:
 	unique_ptr<ProtocolMessage> HandleMessage(ProtocolMessage &received_message);
+	unique_ptr<ProtocolMessage> HandleOrchestrateRequest(ProtocolMessage &received_message);
 
 protected:
 	string listen_string;

@@ -1,0 +1,15 @@
+# name: test/sql/orchestrate.test
+# description: test rpc extension
+# group: [sql]
+
+require rpc
+
+statement error
+FROM rpc_orchestrate('aaa', 'bbb');
+----
+No function matches
+
+statement error
+FROM rpc_orchestrate('coordinator_server', 'SELECT * FROM tbl', 'metadata {"client_id", "panel_id", "..."}');
+----
+No 'orchestrate' function registered in the catalog.

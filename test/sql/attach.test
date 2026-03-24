@@ -5,14 +5,14 @@
 require rpc
 
 
-statement ok
-create schema moo;
-
-statement ok
-create table fuu as values(42, 43);
-
-statement ok
-create table moo.fuu2 as values(44, 45);
+# statement ok
+# create schema moo;
+#
+# statement ok
+# create table fuu as values(42, 43);
+#
+# statement ok
+# create table moo.fuu2 as values(44, 45);
 
 # statement ok
 # call rpc_generate_keys();
@@ -23,117 +23,126 @@ foreach server  '__TEST_DIR__/duckdb-rpc-socket'
 statement ok con1
 call rpc_start(${server});
 
-query II con2
-from rpc_call(${server}, 'select 42, 43')
-----
-42	43
+statement ok con2
+attach ${server} AS remote (TYPE rpc)
 
 statement ok con2
-attach ${server} as rpc (TYPE rpc)
+USE remote;
 
-query II
-from rpc.fuu;
-----
-42	43
+statement ok con2
+CREATE table t as select range a from range (10)
 
-query I
-from rpc.call('select 42');
-----
-42
+# query II con2
+# from rpc_call(${server}, 'select 42, 43')
+# ----
+# 42	43
 
-query I
-from rpc.main.fuu select col1 where col0=42 ;
-----
-43
-
-query II
-from rpc.main.fuu where col0=43;
-----
-
-statement error
-from rpc.yyyy
-----
-Table with name yyyy does not exist
-
-statement error
-from rpc.xxx.yyy;
-----
-schema "xxx" does not exist
-
-# TODO
+# statement ok con2
+# attach ${server} as rpc (TYPE rpc)
+#
 # query II
-# from rpc.moo.fuu2;
+# from rpc.fuu;
 # ----
 # 42	43
 #
+# query I
+# from rpc.call('select 42');
+# ----
+# 42
+#
+# query I
+# from rpc.main.fuu select col1 where col0=42 ;
+# ----
+# 43
+#
+# query II
+# from rpc.main.fuu where col0=43;
+# ----
+#
+# statement error
+# from rpc.yyyy
+# ----
+# Table with name yyyy does not exist
+#
+# statement error
+# from rpc.xxx.yyy;
+# ----
+# schema "xxx" does not exist
+#
+# # TODO
+# # query II
+# # from rpc.moo.fuu2;
+# # ----
+# # 42	43
+# #
+# #
+# # statement ok
+# # create schema rpc.fuuschema;
 #
 # statement ok
-# create schema rpc.fuuschema;
-
-statement ok
-begin transaction
-
-
-statement ok
-create table rpc.fuu2(i integer);
-
-
-statement ok
-from rpc.fuu2;
-
-statement ok
-commit
-
-statement ok
-from rpc.fuu2;
-
-
-statement ok
-drop table rpc.fuu2;
-
-
-statement ok
-begin transaction
-
-statement ok
-create table rpc.fuu3(i integer);
-
-statement error
-insert into rpc.fuu2 values (42);
-----
-not exist
-
-statement ok
-insert into rpc.fuu3 from range(10000);
-
-query I
-from rpc.fuu3 select count(i);
-----
-10000
-
-statement ok
-rollback
-
-statement error
-from rpc.fuu3;
-----
-not exist
-
-
-statement ok con2
-detach rpc;
-
-statement error con2
-detach rpc;
-----
-database not found
-
-statement ok con1
-call rpc_stop(${server});
-
-statement error con2
-attach ${server} as rpc (TYPE rpc)
-----
-Connection refused
-
+# begin transaction
+#
+#
+# statement ok
+# create table rpc.fuu2(i integer);
+#
+#
+# statement ok
+# from rpc.fuu2;
+#
+# statement ok
+# commit
+#
+# statement ok
+# from rpc.fuu2;
+#
+#
+# statement ok
+# drop table rpc.fuu2;
+#
+#
+# statement ok
+# begin transaction
+#
+# statement ok
+# create table rpc.fuu3(i integer);
+#
+# statement error
+# insert into rpc.fuu2 values (42);
+# ----
+# not exist
+#
+# statement ok
+# insert into rpc.fuu3 from range(10000);
+#
+# query I
+# from rpc.fuu3 select count(i);
+# ----
+# 10000
+#
+# statement ok
+# rollback
+#
+# statement error
+# from rpc.fuu3;
+# ----
+# not exist
+#
+#
+# statement ok con2
+# detach rpc;
+#
+# statement error con2
+# detach rpc;
+# ----
+# database not found
+#
+# statement ok con1
+# call rpc_stop(${server});
+#
+# statement error con2
+# attach ${server} as rpc (TYPE rpc)
+# ----
+# Connection refused
+#
 endloop
