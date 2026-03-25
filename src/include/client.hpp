@@ -17,7 +17,7 @@ public:
 		printf("C SEND %s\n", MessageTypeToString(request_message->Type()).c_str());
 		Send(std::move(request_message));
 		auto response_message = WaitForMessageInternal(TARGET::TYPE).release();
-		//	printf("C RECV %s\n", MessageTypeToString(response_message->Type()).c_str());
+		printf("C RECV %s\n", MessageTypeToString(response_message->Type()).c_str());
 
 		return unique_ptr<TARGET>(reinterpret_cast<TARGET *>(response_message));
 	}

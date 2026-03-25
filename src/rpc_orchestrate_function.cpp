@@ -63,13 +63,13 @@ static unique_ptr<FunctionData> RpcBindOrchestrate(ClientContext &context, Table
 	bind_data->connection_id = connection_request_response->ConnectionId();
 
 	// we do not need a bind a response yet
-	// todo; maybe make this orchestrat bind respond?
 	auto orchestrate_bind_response = client->MakeRequest<OrchestrateResponseMessage>(
 		make_uniq<OrchestrateRequestMessage>(bind_data->connection_id, bind_data->query_string));
 
-	if (!orchestrate_bind_response->IsAvailable()) {
-		throw NotImplementedException("No orchestrator function found on remote server");
-	}
+	// maybe we need to re-implement this
+	// if (!orchestrate_bind_response->IsAvailable()) {
+	// 	throw NotImplementedException("No orchestrator function found on remote server");
+	// }
 
 	bind_data->estimated_cardinality = orchestrate_bind_response->EstimatedCardinality();
 

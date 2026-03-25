@@ -303,9 +303,10 @@ unique_ptr<ProtocolMessage> RpcServer::HandleOrchestrateRequest(ProtocolMessage 
 
 	D_ASSERT(!server_uri.empty());
 
-
 	// use the server id (or connection id (?)) to connect with the worker node
 	// TODO; maybe create a mapping; server_id -> available connections
+
+	// TODO; put this in a separate ForwardPrepare() function and ForwardResult() function
 
 	// TODO; with server id, issue a new connection request
 	auto client = RpcClient::GetClient(server_uri);
@@ -314,13 +315,10 @@ unique_ptr<ProtocolMessage> RpcServer::HandleOrchestrateRequest(ProtocolMessage 
 	auto connection_id = connection_request_response->ConnectionId();
 
 	// TODO; send prepare (forward)
-	auto bind_response = client->MakeRequest<PrepareResponseMessage>(
-	make_uniq<PrepareRequestMessage>(connection_id, query, true));
+	auto bind_response = client->MakeRequest<ForwardPrepareResponseMessage>(client->MakeRequest<ForwardPrepareResponseMessage>(
+	make_uniq<PrepareRequestMessage>(connection_id, query, true)), orchestrate_request_message.ConnectionId());
 
 	// TODO; send fetch (forward)
-
-
-
 
 	return nullptr;
 }
