@@ -4,8 +4,6 @@
 
 require remote
 
-require json
-
 statement ok
 call rpc_generate_keys();
 

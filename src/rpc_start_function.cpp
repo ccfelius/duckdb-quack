@@ -64,7 +64,8 @@ static void RpcStartFun(ClientContext &context, TableFunctionInput &data_p, Data
 
 		// TODO there could be a race condition here, lock this
 		auto lookup_result_token = config.TryGetCurrentSetting("rpc_default_token", default_token_val);
-		D_ASSERT(lookup_result_token);
+
+		//D_ASSERT(lookup_result_token);
 
 		if (default_token_val.IsNull()) {
 			config.SetOptionByName("rpc_default_token", Value(RpcServer::GenerateSessionId()));

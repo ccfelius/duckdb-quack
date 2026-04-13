@@ -14,7 +14,7 @@ RpcStorageExtensionInfo &RpcStorageExtensionInfo::GetState(const DatabaseInstanc
 }
 
 RpcServer &RpcStorageExtensionInfo::FindOrCreateServer(ClientContext &context, const RpcUri &listen_uri) {
-	std::lock_guard lock(servers_mutex);
+	std::lock_guard<std::mutex> lock(servers_mutex);
 	auto it = servers.find(listen_uri.Uri());
 	if (it != servers.end()) {
 		return *it->second;
@@ -27,7 +27,7 @@ RpcServer &RpcStorageExtensionInfo::FindOrCreateServer(ClientContext &context, c
 }
 
 bool RpcStorageExtensionInfo::StopServer(ClientContext &context, const RpcUri &listen_uri) {
-	std::lock_guard lock(servers_mutex);
+	std::lock_guard<std::mutex> lock(servers_mutex);
 	const auto it = servers.find(listen_uri.Uri());
 	if (it == servers.end()) {
 		return false;

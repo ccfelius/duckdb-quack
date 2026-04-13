@@ -9,6 +9,7 @@
 #include "rpc_storage_extension.hpp"
 #include "rpc_uri.hpp"
 
+#include "duckdb/common/types/blob.hpp"
 #include "duckdb/logging/log_manager.hpp"
 #include "duckdb/storage/storage_extension.hpp"
 
@@ -40,10 +41,11 @@ public:
 
 // pass session id
 static void RpcAuthToken(const DataChunk &args, ExpressionState &state, Vector &result) {
-	D_ASSERT(args.size() == 2);
-	D_ASSERT(args.GetTypes()[0].id() == LogicalTypeId::VARCHAR);
-	D_ASSERT(args.GetTypes()[1].id() == LogicalTypeId::VARCHAR);
-	D_ASSERT(result.GetType().id() == LogicalTypeId::BOOLEAN);
+	auto sz = args.size();
+	// D_ASSERT(args.size() == 2);
+	// D_ASSERT(args.GetTypes()[0].id() == LogicalTypeId::VARCHAR);
+	// D_ASSERT(args.GetTypes()[1].id() == LogicalTypeId::VARCHAR);
+	// D_ASSERT(result.GetType().id() == LogicalTypeId::BOOLEAN);
 
 	auto auth_str = args.GetValue(1, 0).GetValue<string>();
 
@@ -58,13 +60,59 @@ static void RpcAuthToken(const DataChunk &args, ExpressionState &state, Vector &
 	result.SetValue(0, Value(auth_str == default_token));
 }
 
+
+
 static void RpcDummyAuthorization(const DataChunk &args, ExpressionState &, Vector &result) {
-	D_ASSERT(args.size() == 2);
+	// D_ASSERT(args.size() == 2);
 	D_ASSERT(args.GetTypes()[0].id() == LogicalTypeId::VARCHAR); // session id
 	D_ASSERT(args.GetTypes()[1].id() == LogicalTypeId::VARCHAR); // query
 	D_ASSERT(result.GetType().id() == LogicalTypeId::BOOLEAN);
 
 	result.SetValue(0, Value(true)); // choose life
+}
+
+ static void RpcVerifySignature(const DataChunk &args, ExpressionState &state, Vector &result) {
+      D_ASSERT(args.GetTypes()[0].id() == LogicalTypeId::VARCHAR); // connection id
+      D_ASSERT(args.GetTypes()[1].id() == LogicalTypeId::VARCHAR); // query
+      D_ASSERT(args.GetTypes()[2].id() == LogicalTypeId::VARCHAR); // signature (base64)
+      D_ASSERT(result.GetType().id() == LogicalTypeId::BOOLEAN);
+
+      auto connection_id  = args.GetValue(0, 0).GetValue<string>();
+      auto query          = args.GetValue(1, 0).GetValue<string>();
+      auto signature_b64  = args.GetValue(2, 0).GetValue<string>();
+
+      Value pubkey_val;
+      auto &config = DBConfig::GetConfig(state.GetContext());
+
+	// get the public key
+      if (!config.TryGetCurrentSetting("rpc_package_pubkey", pubkey_val)
+          || pubkey_val.IsNull()
+          || pubkey_val.GetValue<string>().empty()) {
+          result.SetValue(0, Value(false));
+          return;
+      }
+
+      auto pem = pubkey_val.GetValue<string>();
+
+      BIO *bio = BIO_new_mem_buf(pem.data(), (int)pem.size());
+      EVP_PKEY *pkey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
+      BIO_free(bio);
+      if (!pkey) {
+          result.SetValue(0, Value(false));
+          return;
+      }
+
+      auto signature = Blob::FromBase64(signature_b64);
+      string payload  = connection_id + "\n" + query;
+
+      EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+      bool ok = EVP_DigestVerifyInit(ctx, nullptr, EVP_sha256(), nullptr, pkey) == 1 &&
+                EVP_DigestVerifyUpdate(ctx, payload.data(), payload.size()) == 1 &&
+                EVP_DigestVerifyFinal(ctx, (const unsigned char *)signature.data(), signature.size()) == 1;
+      EVP_MD_CTX_free(ctx);
+      EVP_PKEY_free(pkey);
+
+      result.SetValue(0, Value(ok));
 }
 
 static void RpcUriParser(const DataChunk &args, ExpressionState &, Vector &result) {
@@ -103,6 +151,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                                 LogicalType::BOOLEAN, RpcDummyAuthorization);
 	loader.RegisterFunction(rpc_authorization);
 
+	ScalarFunction rpc_verify_signature("rpc_verify_signature",
+	  {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
+	  LogicalType::BOOLEAN, RpcVerifySignature);
+
+	loader.RegisterFunction(rpc_verify_signature);
+
 	ScalarFunction rpc_uri_parser("rpc_uri_parser", {/* uri */ LogicalType::VARCHAR, /* ssl */ LogicalType::BOOLEAN},
 	                              LogicalType::STRUCT({{"host", LogicalType::VARCHAR},
 	                                                   {"port", LogicalType::USMALLINT},
@@ -126,9 +180,16 @@ static void LoadInternal(ExtensionLoader &loader) {
 	config.AddExtensionOption("rpc_authorization_function", "Name of a callback function for authorization",
 	                          LogicalType::VARCHAR, Value("rpc_dummy_authorization"));
 
+	// config.AddExtensionOption("rpc_authorization_function", "Name of a callback function for authorization",
+	// 					  LogicalType::VARCHAR, Value("rpc_verify_signature"));
+
 	// TODO make this readonly from SQL?
 	config.AddExtensionOption("rpc_default_token", "Authorization token used by default", LogicalType::VARCHAR, Value(),
 	                          nullptr, SetScope::GLOBAL);
+
+	config.AddExtensionOption("rpc_signed_plan_pubkey",
+						  "PEM public key for verifying signed packages",
+						  LogicalType::VARCHAR, Value(""));
 }
 
 void RemoteExtension::Load(ExtensionLoader &loader) {

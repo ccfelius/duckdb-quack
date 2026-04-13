@@ -53,6 +53,36 @@ string RpcServer::CreateNewConnection(const string &session_id) {
 	return session_id;
 }
 
+static bool VerifyPlanSignature(DatabaseInstance &db, const string &payload, const string &signature_b64) {
+	// get the public key for plan signing
+	Value pubkey_val;
+	auto &config = DBConfig::GetConfig(db);
+	if (!config.TryGetCurrentSetting("rpc_orchestrator_public_key", pubkey_val)
+		|| pubkey_val.IsNull()
+		|| pubkey_val.GetValue<string>().empty()) {
+		return false;
+		}
+
+	auto pem = pubkey_val.GetValue<string>();
+
+	BIO *bio = BIO_new_mem_buf(pem.data(), (int)pem.size());
+      EVP_PKEY *pkey = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
+      BIO_free(bio);
+      if (!pkey) {
+          return false;
+      }
+
+      auto signature = Blob::FromBase64(signature_b64);
+
+      EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+      bool ok = EVP_DigestVerifyInit(ctx, nullptr, EVP_sha256(), nullptr, pkey) == 1 &&
+                EVP_DigestVerifyUpdate(ctx, payload.data(), payload.size()) == 1 &&
+                EVP_DigestVerifyFinal(ctx, (const unsigned char *)signature.data(), signature.size()) == 1;
+      EVP_MD_CTX_free(ctx);
+      EVP_PKEY_free(pkey);
+      return ok;
+}
+
 // try to get an estimated cardinality from the profiler, orrr
 static optional_idx GetEstimatedCardinality(ClientContext &context) {
 	optional_idx estimated_cardinality = optional_idx::Invalid();

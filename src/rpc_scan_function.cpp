@@ -214,7 +214,7 @@ unique_ptr<GlobalTableFunctionState> RpcInitGlobal(ClientContext &context, Table
 		client->Request<PrepareResponseMessage>(make_uniq<PrepareRequestMessage>(bind_data.connection_id, query, true));
 	}
 
-	return make_uniq<RpcGlobalState>(GlobalTableFunctionState::MAX_THREADS);
+	return make_uniq<RpcGlobalState>(+GlobalTableFunctionState::MAX_THREADS);
 }
 
 unique_ptr<LocalTableFunctionState> RpcInitLocal(ExecutionContext &context, TableFunctionInitInput &input,

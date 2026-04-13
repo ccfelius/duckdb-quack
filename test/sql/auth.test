@@ -1,0 +1,26 @@
+# name: test/sql/auth.test
+# description: test partial auth
+# group: [sql]
+
+require remote
+
+statement ok
+call rpc_generate_keys();
+
+foreach server 'remote:localhost'
+
+foreach ssl false true
+
+statement ok con1
+call rpc_start({server}, disable_ssl={ssl});
+
+sleep 100 millisecond
+
+query I con2
+from rpc_call({server}, 'select 42')
+----
+42
+
+endloop
+
+endloop
