@@ -11,6 +11,9 @@ foreach ssl false true
 statement ok con1
 call rpc_start({server}, disable_ssl={ssl});
 
+#avoid race condition
+sleep 100 millisecond
+
 statement ok con2
 attach {server} as rpc (disable_ssl {ssl})
 

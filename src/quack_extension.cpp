@@ -40,7 +40,7 @@ public:
 
 // pass session id
 static void RpcAuthToken(const DataChunk &args, ExpressionState &state, Vector &result) {
-	D_ASSERT(args.size() == 2);
+	D_ASSERT(args.GetTypes().size() == 2);
 	D_ASSERT(args.GetTypes()[0].id() == LogicalTypeId::VARCHAR);
 	D_ASSERT(args.GetTypes()[1].id() == LogicalTypeId::VARCHAR);
 	D_ASSERT(result.GetType().id() == LogicalTypeId::BOOLEAN);
@@ -59,7 +59,7 @@ static void RpcAuthToken(const DataChunk &args, ExpressionState &state, Vector &
 }
 
 static void RpcDummyAuthorization(const DataChunk &args, ExpressionState &, Vector &result) {
-	D_ASSERT(args.size() == 2);
+	D_ASSERT(args.GetTypes().size() == 2);
 	D_ASSERT(args.GetTypes()[0].id() == LogicalTypeId::VARCHAR); // session id
 	D_ASSERT(args.GetTypes()[1].id() == LogicalTypeId::VARCHAR); // query
 	D_ASSERT(result.GetType().id() == LogicalTypeId::BOOLEAN);

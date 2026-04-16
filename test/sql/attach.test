@@ -22,6 +22,9 @@ foreach ssl false true
 statement ok con1
 call rpc_start({server}, disable_ssl={ssl});
 
+# avoid race condition
+sleep 100 millisecond
+
 query II con2
 from rpc_call({server}, 'select 42, 43', disable_ssl={ssl})
 ----

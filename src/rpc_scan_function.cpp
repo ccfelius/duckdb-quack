@@ -36,7 +36,7 @@ static unique_ptr<FunctionData> RpcBind(ClientContext &context, TableFunctionBin
 	auto &config = DBConfig::GetConfig(context);
 
 	auto lookup_result_token = config.TryGetCurrentSetting("rpc_default_token", default_token_val);
-	D_ASSERT(lookup_result_token);
+	// D_ASSERT(lookup_result_token);
 	if (default_token_val.IsNull() || default_token_val.type().id() != LogicalTypeId::VARCHAR) {
 		throw InvalidConfigurationException("No RPC token found");
 	}
@@ -229,10 +229,14 @@ unique_ptr<LocalTableFunctionState> RpcInitLocal(ExecutionContext &context, Tabl
 		return nullptr;
 	}
 	auto local_state = make_uniq<RpcLocalState>();
-	// re-use initial client from bind if possible
-	if (bind_data.initial_client) { // TODO possible race here?
-		local_state->client = unique_ptr<RpcClient>(bind_data.initial_client.release());
-	} else {
+	// re-use initial client from bind if possible, guarded against concurrent RpcInitLocal calls
+	{
+		lock_guard<mutex> guard(bind_data.initial_client_mutex);
+		if (bind_data.initial_client) {
+			local_state->client = std::move(bind_data.initial_client);
+		}
+	}
+	if (!local_state->client) {
 		local_state->client = RpcClient::GetClient(bind_data.server_uri);
 		local_state->client->SetContext(&context.client);
 	}

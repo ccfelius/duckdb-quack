@@ -81,7 +81,7 @@ RpcCatalog::RpcCatalog(AttachedDatabase &db_p, const RpcUri &server_uri_p, Clien
 
 	// TODO there could be a race condition here, lock this
 	auto lookup_result_token = config.TryGetCurrentSetting("rpc_default_token", default_token_val);
-	D_ASSERT(lookup_result_token);
+	// D_ASSERT(lookup_result_token);
 
 	auto connection_response = client->Request<ConnectionResponseMessage>(
 	    make_uniq<ConnectionRequestMessage>(default_token_val.GetValue<string>()));

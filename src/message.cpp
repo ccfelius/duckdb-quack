@@ -84,10 +84,10 @@ void ProtocolMessage::ToSocket(int fd, MemoryStream &write_stream) const {
 	ToMemoryStream(write_stream);
 
 	idx_t msg_len = write_stream.GetPosition();
-	if (send(fd, &msg_len, sizeof(idx_t), 0) != sizeof(idx_t)) {
+	if (send(fd, (const char *)&msg_len, (int)sizeof(idx_t), 0) != (int)sizeof(idx_t)) {
 		throw IOException("Failed to send message length (%llu): %s", msg_len, strerror(errno));
 	}
-	if (send(fd, write_stream.GetData(), msg_len, 0) != msg_len) {
+	if (send(fd, (const char *)write_stream.GetData(), (int)msg_len, 0) != (int)msg_len) {
 		throw IOException("Failed to send message body (length %llu): %s", msg_len, strerror(errno));
 	}
 }

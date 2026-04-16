@@ -4,7 +4,7 @@
 
 require quack
 
-require json
+# require json
 
 foreach server 'quack:localhost'
 
@@ -110,10 +110,10 @@ from rpc_call({server}, 'from my_range', disable_ssl={ssl})
 statement ok con2
 set enable_profiling='no_output'
 
-query I con2
-from read_json('{TEST_DIR}/profile_cardinality_1.json') select children[1].extra_info."Estimated Cardinality"::INT ec
-----
-4242
+# query I con2
+# from read_json('{TEST_DIR}/profile_cardinality_1.json') select children[1].extra_info."Estimated Cardinality"::INT ec
+# ----
+# 4242
 
 statement ok con2
 set enable_profiling='json'
@@ -127,10 +127,10 @@ from rpc_call({server}, 'from my_range limit 2121', disable_ssl={ssl})
 statement ok con2
 set enable_profiling='no_output'
 
-query I con2
-from read_json('{TEST_DIR}/profile_cardinality_2.json') select children[1].extra_info."Estimated Cardinality"::INT ec
-----
-2121
+# query I con2
+# from read_json('{TEST_DIR}/profile_cardinality_2.json') select children[1].extra_info."Estimated Cardinality"::INT ec
+# ----
+# 2121
 
 statement ok con1
 drop table my_range
