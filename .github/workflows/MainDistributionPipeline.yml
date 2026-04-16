@@ -19,6 +19,7 @@ jobs:
       extension_name: quack
       duckdb_version: b5ed9c59bfc8528c6e1a35d363a802fcaaa403c8
       ci_tools_version: v1.5-variegata
+      exclude_archs: 'windows_amd64_rtools'
 
   code-quality:
     name: Code Quality
