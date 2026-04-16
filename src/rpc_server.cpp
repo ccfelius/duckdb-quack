@@ -123,6 +123,8 @@ static string ExtractConnectionId(ProtocolMessage &msg) {
 		return msg.Cast<CatalogRequestMessage>().ConnectionId();
 	case MessageType::APPEND_REQUEST:
 		return msg.Cast<AppendRequestMessage>().ConnectionId();
+	case MessageType::CANCEL_REQUEST:
+		return msg.Cast<CancelRequestMessage>().ConnectionId();
 	default:
 		return "";
 	}
@@ -325,6 +327,16 @@ unique_ptr<ProtocolMessage> RpcServer::HandleMessageInternal(ProtocolMessage &re
 		collection.Append(append_request_message.AppendChunk());
 		rpc_connection->duckdb_connection->Append(*table_info, collection);
 		return make_uniq<AppendResponseMessage>();
+	}
+	case MessageType::CANCEL_REQUEST: {
+		auto &cancel_message = received_message.Cast<CancelRequestMessage>();
+		auto rpc_connection = GetConnection(cancel_message.ConnectionId());
+		if (!rpc_connection) {
+			return make_uniq<ErrorMessage>("Invalid connection id");
+		}
+		// interrupt
+		rpc_connection->duckdb_connection->context->Interrupt();
+		return make_uniq<CancelResponseMessage>();
 	}
 	default: {
 		return make_uniq<ErrorMessage>(

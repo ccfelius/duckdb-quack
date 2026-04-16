@@ -20,6 +20,8 @@ enum class MessageType : uint8_t {
 	CATALOG_RESPONSE = 10,
 	APPEND_REQUEST = 11,
 	APPEND_RESPONSE = 12,
+	CANCEL_REQUEST = 13,
+	CANCEL_RESPONSE = 14,
 	RPC_ERROR = 100
 };
 
@@ -313,6 +315,34 @@ public:
 private:
 	ErrorMessage() : ProtocolMessage(TYPE) {};
 	string error_message;
+};
+
+class CancelRequestMessage : public ProtocolMessage {
+public:
+	static constexpr MessageType TYPE = MessageType::CANCEL_REQUEST;
+	explicit CancelRequestMessage(const string &connection_id_p)
+	    : ProtocolMessage(TYPE), connection_id(connection_id_p) {
+	}
+
+	const string &ConnectionId() const {
+		return connection_id;
+	}
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
+
+private:
+	string connection_id;
+};
+
+class CancelResponseMessage : public ProtocolMessage {
+public:
+	static constexpr MessageType TYPE = MessageType::CANCEL_RESPONSE;
+	explicit CancelResponseMessage() : ProtocolMessage(TYPE) {
+	}
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
 };
 
 } // namespace duckdb

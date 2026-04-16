@@ -106,6 +106,9 @@ protected:
 	RpcUri uri;
 	optional_ptr<ClientContext> context;
 
+public:
+	virtual void CancelRequest(const string &connection_id) = 0;
+
 private:
 	virtual unique_ptr<ProtocolMessage> RequestInternal(unique_ptr<ProtocolMessage> request_message) = 0;
 };
@@ -114,6 +117,9 @@ class HttpsRpcClient : public RpcClient {
 public:
 	HttpsRpcClient(const RpcUri &uri_p);
 	~HttpsRpcClient() override;
+
+public:
+	void CancelRequest(const string &connection_id) override;
 
 private:
 	unique_ptr<ProtocolMessage> RequestInternal(unique_ptr<ProtocolMessage> request_message) override;

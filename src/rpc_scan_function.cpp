@@ -249,6 +249,11 @@ static void RpcScan(ClientContext &context, TableFunctionInput &input, DataChunk
 	// hasn't signalled end. global_state.done is an optimization hint that
 	// skips wasted FETCHes — it must not pre-empt draining local pending.
 	if (local_state.pending.empty() && !local_state.server_exhausted && !global_state.done) {
+		// check if query has been cancelled
+		if (context.IsInterrupted()) {
+			local_state.client->CancelRequest(bind_data.connection_id);
+			throw InterruptException();
+		}
 		auto fetch_response =
 		    local_state.client->Request<FetchResponseMessage>(make_uniq<FetchRequestMessage>(bind_data.connection_id));
 		if (fetch_response->Chunks().empty()) {

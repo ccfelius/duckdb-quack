@@ -36,6 +36,10 @@ string duckdb::MessageTypeToString(MessageType type) {
 		return "APPEND_RESPONSE";
 	case MessageType::RPC_ERROR:
 		return "ERROR";
+	case MessageType::CANCEL_REQUEST:
+		return "CANCEL_REQUEST";
+	case MessageType::CANCEL_RESPONSE:
+		return "CANCEL_RESPONSE";
 	case MessageType::INVALID:
 		break;
 	}
@@ -61,15 +65,15 @@ unique_ptr<ProtocolMessage> ProtocolMessage::FromMemoryStream(MemoryStream &read
 
 unique_ptr<ProtocolMessage> ProtocolMessage::FromSocket(int fd, MemoryStream &read_stream) {
 	idx_t msg_len;
-	auto data_recv_header = recv(fd, &msg_len, sizeof(idx_t), MSG_WAITALL);
+	auto data_recv_header = recv(fd, (char *)&msg_len, (int)sizeof(idx_t), MSG_WAITALL);
 	if (data_recv_header != sizeof(idx_t)) {
 		throw IOException("Failed to receive message length: %s", strerror(errno));
 	}
 	read_stream.Rewind();
 	read_stream.GrowCapacity(msg_len);
 
-	auto data_recv_message = recv(fd, (void *)read_stream.GetData(), msg_len, MSG_WAITALL);
-	if (data_recv_message != msg_len) {
+	auto data_recv_message = recv(fd, (char *)read_stream.GetData(), (int)msg_len, MSG_WAITALL);
+	if (data_recv_message != (int)msg_len) {
 		throw IOException("Failed to receive message body (length %llu): %s", msg_len, strerror(errno));
 	}
 	return FromMemoryStream(read_stream);
@@ -117,6 +121,10 @@ unique_ptr<ProtocolMessage> ProtocolMessage::Deserialize(Deserializer &deseriali
 		return AppendResponseMessage::Deserialize(deserializer);
 	case MessageType::RPC_ERROR:
 		return ErrorMessage::Deserialize(deserializer);
+	case MessageType::CANCEL_REQUEST:
+		return CancelRequestMessage::Deserialize(deserializer);
+	case MessageType::CANCEL_RESPONSE:
+		return CancelResponseMessage::Deserialize(deserializer);
 	default:
 		throw SerializationException("Unsupported type for deserialization of Message!");
 	}
@@ -298,4 +306,22 @@ void AppendResponseMessage::Serialize(Serializer &serializer) const {
 
 unique_ptr<ProtocolMessage> AppendResponseMessage::Deserialize(Deserializer &deserializer) {
 	return make_uniq<AppendResponseMessage>();
+}
+
+void CancelRequestMessage::Serialize(Serializer &serializer) const {
+	ProtocolMessage::Serialize(serializer);
+	serializer.WriteProperty<string>(98, "connection_id", connection_id);
+}
+
+unique_ptr<ProtocolMessage> CancelRequestMessage::Deserialize(Deserializer &deserializer) {
+	auto connection_id = deserializer.ReadProperty<string>(98, "connection_id");
+	return make_uniq<CancelRequestMessage>(connection_id);
+}
+
+void CancelResponseMessage::Serialize(Serializer &serializer) const {
+	ProtocolMessage::Serialize(serializer);
+}
+
+unique_ptr<ProtocolMessage> CancelResponseMessage::Deserialize(Deserializer &deserializer) {
+	return make_uniq<CancelResponseMessage>();
 }

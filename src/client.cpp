@@ -101,6 +101,19 @@ unique_ptr<ProtocolMessage> HttpsRpcClient::RequestInternal(unique_ptr<ProtocolM
 	return ProtocolMessage::FromMemoryStream(non_owning_read_stream);
 }
 
+void HttpsRpcClient::CancelRequest(const string &connection_id) {
+	MemoryStream cancel_stream;
+	CancelRequestMessage msg(connection_id);
+	msg.ToMemoryStream(cancel_stream);
+
+	duckdb_httplib_openssl::Client cancel_client(uri.Http());
+	cancel_client.enable_server_certificate_verification(false);
+	cancel_client.enable_server_hostname_verification(false);
+
+	cancel_client.Post("/rpc", (const char *)cancel_stream.GetData(), cancel_stream.GetPosition(),
+	                   "application/duckdb");
+}
+
 unique_ptr<RpcClient> RpcClient::GetClient(const RpcUri &uri) {
 	return make_uniq<HttpsRpcClient>(uri);
 }
