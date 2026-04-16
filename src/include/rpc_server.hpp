@@ -9,13 +9,6 @@
 
 #include <thread>
 
-#include <sys/un.h>
-//
-// // TODO don't like those includes here...
-// #include "websocketpp/config/asio.hpp"
-// #include "websocketpp/config/asio_client.hpp"
-// #include "websocketpp/server.hpp"
-
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "httplib.hpp"
 
