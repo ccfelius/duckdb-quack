@@ -29,7 +29,7 @@ string duckdb::MessageTypeToString(MessageType type) {
 		return "APPEND_REQUEST";
 	case MessageType::APPEND_RESPONSE:
 		return "APPEND_RESPONSE";
-	case MessageType::ERROR:
+	case MessageType::RPC_ERROR:
 		return "ERROR";
 	case MessageType::INVALID:
 		break;
@@ -110,7 +110,7 @@ unique_ptr<ProtocolMessage> ProtocolMessage::Deserialize(Deserializer &deseriali
 		return AppendRequestMessage::Deserialize(deserializer);
 	case MessageType::APPEND_RESPONSE:
 		return AppendResponseMessage::Deserialize(deserializer);
-	case MessageType::ERROR:
+	case MessageType::RPC_ERROR:
 		return ErrorMessage::Deserialize(deserializer);
 	default:
 		throw SerializationException("Unsupported type for deserialization of Message!");

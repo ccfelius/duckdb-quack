@@ -19,7 +19,7 @@ enum class MessageType : uint8_t {
 	CATALOG_RESPONSE = 10,
 	APPEND_REQUEST = 11,
 	APPEND_RESPONSE = 12,
-	ERROR = 100
+	RPC_ERROR = 100
 };
 
 string MessageTypeToString(MessageType type);
@@ -299,7 +299,7 @@ public:
 
 class ErrorMessage : public ProtocolMessage {
 public:
-	static constexpr MessageType TYPE = MessageType::ERROR;
+	static constexpr MessageType TYPE = MessageType::RPC_ERROR;
 	explicit ErrorMessage(const string &error_message_p) : ProtocolMessage(TYPE), error_message(error_message_p) {
 	}
 	const std::string &Error() const {

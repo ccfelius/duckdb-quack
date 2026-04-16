@@ -164,7 +164,7 @@ unique_ptr<ProtocolMessage> RpcServer::HandleMessage(ProtocolMessage &received_m
 		                       .time_since_epoch()
 		                       .count();
 		string error;
-		if (response->Type() == MessageType::ERROR) {
+		if (response->Type() == MessageType::RPC_ERROR) {
 			error = response->Cast<ErrorMessage>().Error();
 		}
 		auto msg = RPCLogType::ConstructLogMessage(received_message.Type(), rpc_connection_id, client_query_id, query,

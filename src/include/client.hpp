@@ -74,7 +74,7 @@ public:
 			auto &logger = Logger::Get(*context);
 			if (logger.ShouldLog(RPCLogType::NAME, RPCLogType::LEVEL)) {
 				string error;
-				if (response_message->Type() == MessageType::ERROR) {
+				if (response_message->Type() == MessageType::RPC_ERROR) {
 					error = response_message->Cast<ErrorMessage>().Error();
 				}
 				auto msg =
@@ -85,7 +85,7 @@ public:
 		}
 
 		if (response_message->Type() != TARGET::TYPE) {
-			if (response_message->Type() == MessageType::ERROR) {
+			if (response_message->Type() == MessageType::RPC_ERROR) {
 				throw IOException("Expected %s message, got error message instead: %s",
 				                  MessageTypeToString(TARGET::TYPE),
 				                  response_message->Cast<ErrorMessage>().Error().c_str());
