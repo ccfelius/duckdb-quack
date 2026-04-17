@@ -229,10 +229,13 @@ unique_ptr<LocalTableFunctionState> RpcInitLocal(ExecutionContext &context, Tabl
 		return nullptr;
 	}
 	auto local_state = make_uniq<RpcLocalState>();
-	// re-use initial client from bind if possible
-	if (bind_data.initial_client) { // TODO possible race here?
-		local_state->client = unique_ptr<RpcClient>(bind_data.initial_client.release());
-	} else {
+	{
+		lock_guard<mutex> lock(bind_data.initial_client_mutex);
+		if (bind_data.initial_client) {
+			local_state->client = std::move(bind_data.initial_client);
+		}
+	}
+	if (!local_state->client) {
 		local_state->client = RpcClient::GetClient(bind_data.server_uri);
 		local_state->client->SetContext(&context.client);
 	}
