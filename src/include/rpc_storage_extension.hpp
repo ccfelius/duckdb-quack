@@ -10,6 +10,7 @@ public:
 	static RpcStorageExtensionInfo &GetState(const DatabaseInstance &instance);
 
 	RpcServer &FindOrCreateServer(ClientContext &context, const RpcUri &listen_uri);
+	optional_ptr<RpcServer> FindServer(const RpcUri &listen_uri);
 	bool StopServer(ClientContext &context, const RpcUri &listen_uri);
 
 	static constexpr const char *STORAGE_EXTENSION_KEY = "quack";

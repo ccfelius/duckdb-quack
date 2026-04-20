@@ -27,6 +27,14 @@ struct RpcConnection {
 	unique_ptr<Connection> duckdb_connection;
 	//	unordered_map<string, std::pair<unique_ptr<PreparedStatement>, unique_ptr<QueryResult>>> duckdb_statements;
 	unique_ptr<QueryResult> duckdb_query_result;
+	string current_query;
+	int64_t query_started_ms = 0;
+};
+
+struct RpcConnectionSnapshot {
+	string connection_id;
+	string current_query;
+	int64_t duration_ms;
 };
 
 class RpcServer {
@@ -37,6 +45,7 @@ public:
 
 	optional_ptr<RpcConnection> GetConnection(const string &connection_id);
 	string CreateNewConnection(const string &session_id);
+	vector<RpcConnectionSnapshot> GetConnectionSnapshots();
 	// TODO need something to destroy connections
 
 	static string GenerateSessionId();

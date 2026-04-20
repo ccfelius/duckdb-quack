@@ -16,6 +16,10 @@ class RpcClient {
 public:
 	explicit RpcClient(const RpcUri &uri_p) : uri(uri_p) {};
 
+	void CancelRequest(const string &connection_id) {
+		Request<CancelResponseMessage>(make_uniq<CancelRequestMessage>(connection_id));
+	}
+
 	void SetContext(optional_ptr<ClientContext> context_p) {
 		context = context_p;
 	}
@@ -45,14 +49,13 @@ public:
 		case MessageType::APPEND_REQUEST:
 			rpc_connection_id = request_message->Cast<AppendRequestMessage>().ConnectionId();
 			break;
+		case MessageType::CANCEL_REQUEST:
+			rpc_connection_id = request_message->Cast<CancelRequestMessage>().ConnectionId();
+			break;
 		default:
 			break;
 		}
 
-		// Inject client_query_id from context into the message before sending.
-		// Guard against reading the active query during transaction start itself
-		// (e.g. BEGIN TRANSACTION via RpcCatalog::ExecuteCommand), where the
-		// transaction isn't yet installed on the TransactionContext.
 		if (context && context->transaction.HasActiveTransaction()) {
 			client_query_id = context->transaction.GetActiveQuery();
 			request_message->SetClientQueryId(client_query_id);
@@ -96,18 +99,20 @@ public:
 		return unique_ptr<TARGET>(reinterpret_cast<TARGET *>(response_message));
 	}
 
+	// Sends a FETCH_REQUEST and returns FETCH_RESPONSE, FINISH_RESPONSE, or CANCEL_RESPONSE.
+	unique_ptr<ProtocolMessage> Fetch(const string &connection_id);
 	static unique_ptr<RpcClient> GetClient(const RpcUri &uri);
 
 	virtual ~RpcClient() {};
+
+protected:
+	virtual void CancelInFlight() {};
 
 protected:
 	mutex request_mutex;
 	MemoryStream read_stream, write_stream;
 	RpcUri uri;
 	optional_ptr<ClientContext> context;
-
-public:
-	virtual void CancelRequest(const string &connection_id) = 0;
 
 private:
 	virtual unique_ptr<ProtocolMessage> RequestInternal(unique_ptr<ProtocolMessage> request_message) = 0;
@@ -119,13 +124,14 @@ public:
 	~HttpsRpcClient() override;
 
 public:
-	void CancelRequest(const string &connection_id) override;
-
 private:
 	unique_ptr<ProtocolMessage> RequestInternal(unique_ptr<ProtocolMessage> request_message) override;
 
 private:
 	unique_ptr<duckdb_httplib_openssl::Client> https_client;
+
+protected:
+	void CancelInFlight() override;
 };
 
 } // namespace duckdb

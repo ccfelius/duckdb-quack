@@ -40,6 +40,8 @@ string duckdb::MessageTypeToString(MessageType type) {
 		return "CANCEL_REQUEST";
 	case MessageType::CANCEL_RESPONSE:
 		return "CANCEL_RESPONSE";
+	case MessageType::FINISH_RESPONSE:
+		return "FINISH_RESPONSE";
 	case MessageType::INVALID:
 		break;
 	}
@@ -125,6 +127,8 @@ unique_ptr<ProtocolMessage> ProtocolMessage::Deserialize(Deserializer &deseriali
 		return CancelRequestMessage::Deserialize(deserializer);
 	case MessageType::CANCEL_RESPONSE:
 		return CancelResponseMessage::Deserialize(deserializer);
+	case MessageType::FINISH_RESPONSE:
+		return FinishResponseMessage::Deserialize(deserializer);
 	default:
 		throw SerializationException("Unsupported type for deserialization of Message!");
 	}
@@ -324,4 +328,13 @@ void CancelResponseMessage::Serialize(Serializer &serializer) const {
 
 unique_ptr<ProtocolMessage> CancelResponseMessage::Deserialize(Deserializer &deserializer) {
 	return make_uniq<CancelResponseMessage>();
+}
+
+void FinishResponseMessage::Serialize(Serializer &serializer) const {
+	ProtocolMessage::Serialize(serializer);
+	// todo; also serialize query id
+}
+
+unique_ptr<ProtocolMessage> FinishResponseMessage::Deserialize(Deserializer &deserializer) {
+	return make_uniq<FinishResponseMessage>();
 }

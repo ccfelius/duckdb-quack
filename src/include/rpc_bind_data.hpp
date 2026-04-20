@@ -11,6 +11,8 @@ struct RpcBindData : FunctionData {
 		throw NotImplementedException("Copy not implemented");
 	}
 	string connection_id;
+	string query;
+	bool owns_connection = false;
 	RpcUri server_uri;
 	string table_name;
 	optional_idx estimated_cardinality;

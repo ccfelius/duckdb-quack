@@ -26,6 +26,15 @@ RpcServer &RpcStorageExtensionInfo::FindOrCreateServer(ClientContext &context, c
 	return *servers[listen_uri.Uri()];
 }
 
+optional_ptr<RpcServer> RpcStorageExtensionInfo::FindServer(const RpcUri &listen_uri) {
+	std::lock_guard lock(servers_mutex);
+	auto it = servers.find(listen_uri.Uri());
+	if (it == servers.end()) {
+		return nullptr;
+	}
+	return it->second.get();
+}
+
 bool RpcStorageExtensionInfo::StopServer(ClientContext &context, const RpcUri &listen_uri) {
 	std::lock_guard lock(servers_mutex);
 	const auto it = servers.find(listen_uri.Uri());

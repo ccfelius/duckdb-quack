@@ -1,0 +1,38 @@
+# name: test/sql/demo.test
+# description: test rpc extension
+# group: [sql]
+
+require quack
+
+statement ok con1
+call rpc_start('quack:localhost');
+
+sleep 100 millisecond
+
+query I con2
+from rpc_call('quack:localhost', 'select 42')
+----
+42
+
+# list all current queries
+query I con3
+select current_query FROM rpc_connections('quack:localhost');
+----
+select 42
+
+query I con2
+from rpc_call('quack:localhost', 'select 43')
+----
+43
+
+query I con4
+from rpc_call('quack:localhost', 'select 44')
+----
+44
+
+query I con3
+select current_query FROM rpc_connections('quack:localhost');
+----
+select 44
+select 43
+select 42

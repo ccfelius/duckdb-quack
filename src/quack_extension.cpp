@@ -14,6 +14,9 @@
 
 #include "catalog.hpp"
 
+#include <rpc_cancel_function.hpp>
+#include "rpc_query_state.hpp"
+
 namespace duckdb {
 
 static unique_ptr<Catalog> RpcAttach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
@@ -91,6 +94,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	loader.RegisterFunction(RpcStartFunction::GetFunction());
 	loader.RegisterFunction(RpcStopFunction::GetFunction());
 	loader.RegisterFunction(RpcGenerateKeysFunction::GetFunction());
+	loader.RegisterFunction(RpcCancelFunction::GetFunction());
+	loader.RegisterFunction(RpcConnectionsFunction::GetFunction());
 
 	// the default authentication function
 	ScalarFunction rpc_auth_token("rpc_auth_token",

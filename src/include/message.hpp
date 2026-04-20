@@ -22,6 +22,7 @@ enum class MessageType : uint8_t {
 	APPEND_RESPONSE = 12,
 	CANCEL_REQUEST = 13,
 	CANCEL_RESPONSE = 14,
+	FINISH_RESPONSE = 15,
 	RPC_ERROR = 100
 };
 
@@ -344,5 +345,23 @@ public:
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
 };
+
+class FinishResponseMessage : public ProtocolMessage {
+public:
+	static constexpr MessageType TYPE = MessageType::FINISH_RESPONSE;
+	explicit FinishResponseMessage() : ProtocolMessage(TYPE) {
+	}
+
+	const string &ConnectionId() const {
+		return connection_id;
+	}
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<ProtocolMessage> Deserialize(Deserializer &deserializer);
+
+private:
+	string connection_id;
+};
+
 
 } // namespace duckdb

@@ -258,16 +258,23 @@ static void RpcScan(ClientContext &context, TableFunctionInput &input, DataChunk
 			local_state.client->CancelRequest(bind_data.connection_id);
 			throw InterruptException();
 		}
-		auto fetch_response =
-		    local_state.client->Request<FetchResponseMessage>(make_uniq<FetchRequestMessage>(bind_data.connection_id));
-		if (fetch_response->Chunks().empty()) {
-			local_state.server_exhausted = true;
-			global_state.done = true;
-		} else {
-			for (auto &chunk : fetch_response->MutableChunks()) {
-				local_state.pending.push(std::move(chunk));
-			}
-		}
+		  auto response = local_state.client->Fetch(bind_data.connection_id);
+
+		  switch (response->Type()) {
+		  case MessageType::FETCH_RESPONSE:
+		      for (auto &chunk : response->Cast<FetchResponseMessage>().MutableChunks()) {
+		          local_state.pending.push(std::move(chunk));
+		      }
+		      break;
+		  case MessageType::FINISH_RESPONSE:
+		      local_state.server_exhausted = true;
+		      global_state.done = true;
+		      break;
+		  case MessageType::CANCEL_RESPONSE:
+		      throw InterruptException();
+		  default:
+		  	throw InternalException("Unexpected message type");
+		  }
 	}
 
 	if (local_state.pending.empty()) {

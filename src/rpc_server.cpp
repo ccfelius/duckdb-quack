@@ -23,6 +23,23 @@ RpcServer::RpcServer(ClientContext &context_p) : db(context_p.db) {
 RpcServer::~RpcServer() {
 }
 
+vector<RpcConnectionSnapshot> RpcServer::GetConnectionSnapshots() {
+	int64_t now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now())
+	                     .time_since_epoch()
+	                     .count();
+	std::lock_guard<std::mutex> lock(active_connections_mutex);
+	vector<RpcConnectionSnapshot> result;
+	for (auto &entry : active_connections) {
+		RpcConnectionSnapshot snap;
+		snap.connection_id = entry.first;
+		snap.current_query = entry.second->current_query;
+		int64_t started = entry.second->query_started_ms;
+		snap.duration_ms = (started > 0) ? (now_ms - started) : 0;
+		result.push_back(std::move(snap));
+	}
+	return result;
+}
+
 optional_ptr<RpcConnection> RpcServer::GetConnection(const string &connection_id) {
 	std::lock_guard<std::mutex> lock(active_connections_mutex);
 	auto it = active_connections.find(connection_id);
@@ -125,6 +142,8 @@ static string ExtractConnectionId(ProtocolMessage &msg) {
 		return msg.Cast<AppendRequestMessage>().ConnectionId();
 	case MessageType::CANCEL_REQUEST:
 		return msg.Cast<CancelRequestMessage>().ConnectionId();
+	case MessageType::FINISH_RESPONSE:
+		return msg.Cast<FinishResponseMessage>().ConnectionId();
 	default:
 		return "";
 	}
@@ -204,6 +223,11 @@ unique_ptr<ProtocolMessage> RpcServer::HandleMessageInternal(ProtocolMessage &re
 
 		std::unique_lock<std::mutex> lock(rpc_connection->lock);
 		rpc_connection->duckdb_query_result.reset();
+		rpc_connection->current_query = prepare_request_message.Query();
+		rpc_connection->query_started_ms =
+		    std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now())
+		        .time_since_epoch()
+		        .count();
 
 		auto statement = rpc_connection->duckdb_connection->Prepare(prepare_request_message.Query());
 		if (statement->HasError()) {
@@ -230,7 +254,7 @@ unique_ptr<ProtocolMessage> RpcServer::HandleMessageInternal(ProtocolMessage &re
 		std::unique_lock<std::mutex> lock(rpc_connection->lock);
 
 		if (!rpc_connection->duckdb_query_result) {
-			return make_uniq<FetchResponseMessage>();
+			return make_uniq<FinishResponseMessage>();
 		}
 		if (rpc_connection->duckdb_query_result->HasError()) {
 			return make_uniq<ErrorMessage>(rpc_connection->duckdb_query_result->GetError());
@@ -254,10 +278,15 @@ unique_ptr<ProtocolMessage> RpcServer::HandleMessageInternal(ProtocolMessage &re
 			}
 			if (!result_chunk || result_chunk->size() == 0) {
 				rpc_connection->duckdb_query_result.reset();
+				rpc_connection->current_query.clear();
+				rpc_connection->query_started_ms = 0;
 				break;
 			}
 			bytes_est += result_chunk->size() * result_chunk->ColumnCount() * 8;
 			batch.push_back(std::move(result_chunk));
+		}
+		if (batch.empty()) {
+			return make_uniq<FinishResponseMessage>();
 		}
 		return make_uniq<FetchResponseMessage>(std::move(batch));
 	}
@@ -334,9 +363,14 @@ unique_ptr<ProtocolMessage> RpcServer::HandleMessageInternal(ProtocolMessage &re
 		if (!rpc_connection) {
 			return make_uniq<ErrorMessage>("Invalid connection id");
 		}
-		// interrupt
 		rpc_connection->duckdb_connection->context->Interrupt();
 		return make_uniq<CancelResponseMessage>();
+	}
+	case MessageType::FINISH_RESPONSE: {
+		auto &finish_message = received_message.Cast<FinishResponseMessage>();
+		std::lock_guard<std::mutex> lock(active_connections_mutex);
+		active_connections.erase(finish_message.ConnectionId());
+		return make_uniq<FinishResponseMessage>();
 	}
 	default: {
 		return make_uniq<ErrorMessage>(
