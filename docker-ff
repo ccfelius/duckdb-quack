@@ -1,0 +1,12 @@
+docker run --rm -v "$PWD":/work -w /work ubuntu:20.04 bash -lc "
+apt-get update &&
+apt-get install -y python3 python3-pip clang-format-11 make &&
+ln -sf /usr/bin/clang-format-11 /usr/bin/clang-format &&
+pip3 install \
+    clang_format==11.0.1 \
+    'black>=24' \
+    cmake-format \
+    isort \
+    ruff &&
+make format-fix
+"
