@@ -106,8 +106,11 @@ unique_ptr<ProtocolMessage> HttpsRpcClient::RequestInternal(unique_ptr<ProtocolM
 		// (e.g. BEGIN TRANSACTION via RpcCatalog::ExecuteCommand), where the
 		// transaction isn't yet installed on the TransactionContext.
 		if (context->transaction.HasActiveTransaction()) {
-			client_query_id = context->transaction.GetActiveQuery();
-			request_message->SetClientQueryId(client_query_id);
+			auto raw_query_id = context->transaction.GetActiveQuery();
+			if (raw_query_id != DConstants::INVALID_INDEX) {
+				client_query_id = raw_query_id;
+				request_message->SetClientQueryId(client_query_id);
+			}
 		}
 
 		// Log RPC message
