@@ -21,12 +21,15 @@ class PreparedStatement;
 class EncryptionState;
 
 struct QuackConnection {
+	explicit QuackConnection(string session_id_p);
+	~QuackConnection();
+
 	mutex lock;
 	unique_ptr<Connection> duckdb_connection;
-	//	unordered_map<string, std::pair<unique_ptr<PreparedStatement>, unique_ptr<QueryResult>>> duckdb_statements;
 	unique_ptr<QueryResult> duckdb_query_result;
 	//! Monotonic counter assigned per FETCH batch — enables order-preserving parallel scans on
 	idx_t next_batch_index = 0;
+	string session_id;
 };
 
 class QuackServer {
@@ -44,8 +47,9 @@ public:
 	//! listen-loop teardown joins all workers, which would deadlock.
 	virtual void Close() {};
 
-	optional_ptr<QuackConnection> GetConnection(const string &connection_id);
+	shared_ptr<QuackConnection> GetConnection(const string &connection_id);
 	string CreateNewConnection(const string &session_id);
+	bool DisconnectConnection(const string &session_id);
 	// TODO need something to destroy connections
 
 	string GenerateSessionId();
@@ -64,15 +68,15 @@ public:
 
 protected:
 	unique_ptr<QuackMessage> HandleMessage(MemoryStream &read_stream);
-	unique_ptr<QuackMessage> HandleMessageInternal(QuackMessage &received_message,
+	unique_ptr<QuackMessage> HandleMessageInternal(DatabaseInstance &db, QuackMessage &received_message,
 	                                               optional_ptr<QuackConnection> connection);
 
 protected:
 	std::vector<std::thread> listen_threads;
 
-	shared_ptr<DatabaseInstance> db;
+	weak_ptr<DatabaseInstance> db_ptr;
 	mutex active_connections_mutex;
-	unordered_map<string, unique_ptr<QuackConnection>> active_connections;
+	unordered_map<string, shared_ptr<QuackConnection>> active_connections;
 
 	mutex session_id_rng_mutex;
 	shared_ptr<EncryptionState> session_id_rng;
@@ -97,6 +101,7 @@ private:
 	unique_ptr<QuackMessage> ReadMessage(MemoryStream &read_stream);
 
 	unique_ptr<duckdb_httplib::Server> server;
+	bool is_running = false;
 };
 ;
 

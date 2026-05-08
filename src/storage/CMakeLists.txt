@@ -7,7 +7,8 @@ add_library(
   quack_schema.cpp
   quack_transaction.cpp
   quack_transaction.cpp
-  quack_transaction_manager.cpp)
+  quack_transaction_manager.cpp
+  quack_view.cpp)
 set(EXTENSION_SOURCES
     ${EXTENSION_SOURCES} $<TARGET_OBJECTS:quack_storage>
     PARENT_SCOPE)

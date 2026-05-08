@@ -25,12 +25,13 @@
     "constructor": ["type", "connection_id"]
   },
   {
-    "class": "ErrorMessage",
+    "class": "ErrorResponse",
     "members": [
       {
         "id": 1,
         "name": "message",
-        "type": "string"
+        "type": "string",
+        "serialize_property": "error.RawMessage()"
       }
     ],
     "constructor": ["message"]
@@ -51,9 +52,16 @@
     ]
   },
   {
+    "class": "SuccessResponse",
+    "members": []
+  },
+  {
+    "class": "DisconnectMessage",
+    "members": []
+  },
+  {
     "class": "CancelRequestMessage",
-    "members": [
-    ]
+    "members": []
   },
   {
     "class": "CancelResponseMessage",

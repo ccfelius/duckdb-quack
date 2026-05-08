@@ -11,7 +11,10 @@ namespace duckdb {
 void HttpQuackServer::StopAccepting() {
 	// Closes the listening socket only. Idempotent. Safe to call from a
 	// request-handler thread.
-	server->stop();
+	if (is_running) {
+		server->stop();
+		is_running = false;
+	}
 }
 
 void HttpQuackServer::Close() {
@@ -19,26 +22,32 @@ void HttpQuackServer::Close() {
 	// httplib worker pool). Must not be called from a worker thread — the
 	// listener's exit path inside httplib joins all workers, so a worker
 	// joining the listener would deadlock through that chain.
-	server->stop();
-	try {
-		for (auto &thread : listen_threads) {
-			if (thread.joinable()) {
-				thread.join();
-			}
+	StopAccepting();
+	for (auto &thread : listen_threads) {
+		if (thread.joinable()) {
+			thread.join();
 		}
-	} catch (std::exception &) {
 	}
 }
 
 HttpQuackServer::~HttpQuackServer() {
-	HttpQuackServer::Close();
+	try {
+		HttpQuackServer::Close();
+	} catch (std::exception &) {
+	}
 }
 
 void HttpQuackServer::ListenThread(HttpQuackServer *server, const string &listen_host, int listen_port) {
 	D_ASSERT(server->server);
 	D_ASSERT(listen_port > 1 && listen_port < 65535);
-	// Socket is already bound (synchronously, in the constructor)
-	server->server->listen_after_bind();
+	// Socket is already bound (synchronously, in the constructor).
+	// Catch everything so the listener thread never lets an exception escape — that
+	// would call std::terminate and abort the host process.
+	try {
+		server->server->listen_after_bind();
+	} catch (...) {
+		server->is_running = false;
+	}
 }
 
 HttpQuackServer::HttpQuackServer(ClientContext &context_p, const QuackUri &uri_p, const string &token_p)
@@ -86,6 +95,7 @@ HttpQuackServer::HttpQuackServer(ClientContext &context_p, const QuackUri &uri_p
 	if (!server->is_valid()) {
 		throw IOException("Failed to instantiate DuckDB server at %s / %s", uri_p.Uri(), uri_p.Http());
 	}
+	is_running = true;
 
 	// Bind synchronously here so that bind() failures (e.g. EADDRINUSE)
 	// propagate to the caller of quack_serve()

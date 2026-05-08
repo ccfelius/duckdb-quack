@@ -1,0 +1,51 @@
+# name: test/sql/attach_views.test
+# description: test attaching views
+# group: [sql]
+
+require quack
+
+require httpfs
+
+set ignore_error_messages __none__
+
+statement ok
+create schema moo;
+
+statement ok
+create view fuu as select 42 i, 'hello world' j
+
+foreach server 'quack:localhost'
+
+statement ok con1
+call quack_serve({server}, token='asdf');
+
+query II con2
+from quack_query({server}, 'select * from fuu', token='asdf')
+----
+42	hello world
+
+statement ok con2
+attach {server} as rpc (token 'asdf')
+
+query II
+from rpc.fuu;
+----
+42	hello world
+
+statement ok con2
+create view rpc.fuu2 as select [1, 2, 3] l
+
+query I
+from rpc.fuu2
+----
+[1, 2, 3]
+
+statement ok
+DROP VIEW rpc.fuu;
+
+statement error
+FROM rpc.fuu
+----
+does not exist
+
+endloop

@@ -2,7 +2,6 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/extension_helper.hpp"
 #include "duckdb/main/secret/secret.hpp"
-#include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/planner/filter/conjunction_filter.hpp"
 #include "duckdb/planner/table_filter.hpp"
 
@@ -12,6 +11,7 @@
 
 #include <queue>
 namespace duckdb {
+
 static unique_ptr<FunctionData> QuackScanBind(ClientContext &context, TableFunctionBindInput &input,
                                               vector<LogicalType> &return_types, vector<string> &names) {
 	// Set logging to be pretty verbose (everything except message payloads)
@@ -32,36 +32,21 @@ static unique_ptr<FunctionData> QuackScanBind(ClientContext &context, TableFunct
 	}
 
 	auto bind_data = make_uniq<QuackScanBindData>();
-	bind_data->server_uri = QuackUri(initial_uri.Uri(), enable_ssl);
-	auto initial_client = QuackClient::GetClient(context, bind_data->server_uri);
+	auto server_uri = QuackUri(initial_uri.Uri(), enable_ssl);
 
 	// Resolve auth token: prefer a quack secret scoped to this URI; fall back to the
 	// global rpc_default_token setting. Mirrors the logic in QuackCatalog::QuackCatalog.
 	string token;
-
 	if (input.named_parameters.find("token") != input.named_parameters.end()) {
 		token = input.named_parameters["token"].GetValue<string>();
 	}
+	bind_data->client_connection = QuackClient::ConnectToServer(context, server_uri, token);
+	auto &client_connection = *bind_data->client_connection;
 
-	if (token.empty()) {
-		auto &secret_manager = SecretManager::Get(context);
-		auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
-		auto match = secret_manager.LookupSecret(transaction, bind_data->server_uri.Uri(), "quack");
-		if (match.HasMatch()) {
-			const auto &kv = dynamic_cast<const KeyValueSecret &>(*match.secret_entry->secret);
-			token = kv.TryGetValue("token", true).ToString();
-		}
-	}
-	if (token.empty()) {
-		throw InvalidInputException("Could not find a Quack authentication token");
-	}
+	auto client = client_connection.GetClient(context);
 
-	auto connection_request_response =
-	    initial_client->Request<ConnectionResponseMessage>(make_uniq<ConnectionRequestMessage>(token));
-	bind_data->connection_id = connection_request_response->ConnectionId();
-
-	auto bind_response = initial_client->Request<PrepareResponseMessage>(
-	    make_uniq<PrepareRequestMessage>(bind_data->connection_id, query));
+	auto bind_response = client->Request<PrepareResponseMessage>(
+	    context, make_uniq<PrepareRequestMessage>(client_connection.ConnectionId(), query));
 
 	return_types = bind_response->Types();
 	names = bind_response->Names();
@@ -70,7 +55,7 @@ static unique_ptr<FunctionData> QuackScanBind(ClientContext &context, TableFunct
 	bind_data->needs_more_fetch = bind_response->NeedsMoreFetch();
 
 	// store the initial client for later re-use
-	bind_data->SetInitialClient(std::move(initial_client));
+	client_connection.StoreClient(std::move(client));
 
 	return bind_data;
 }
@@ -105,11 +90,11 @@ static unique_ptr<FunctionData> QuackScanBindCatalogName(ClientContext &context,
 
 	auto query = input.inputs[1].GetValue<string>();
 	auto bind_data = make_uniq<QuackScanBindData>();
-	bind_data->server_uri = catalog.GetServerUri();
-	bind_data->connection_id = catalog.GetConnectionId();
-
-	auto bind_response = catalog.GetRawClient().Request<PrepareResponseMessage>(
-	    make_uniq<PrepareRequestMessage>(bind_data->connection_id, query));
+	bind_data->client_connection = catalog.GetClientConnection();
+	auto client = bind_data->client_connection->GetClient(context);
+	auto bind_response = client->Request<PrepareResponseMessage>(
+	    context, make_uniq<PrepareRequestMessage>(bind_data->client_connection->ConnectionId(), query));
+	bind_data->client_connection->StoreClient(std::move(client));
 
 	return_types = bind_response->Types();
 	names = bind_response->Names();
@@ -120,6 +105,27 @@ static unique_ptr<FunctionData> QuackScanBindCatalogName(ClientContext &context,
 	return bind_data;
 }
 
+enum class ChunkResultPushdownType { REQUIRES_PUSHDOWN, PUSHDOWN_ALREADY_APPLIED };
+
+class ChunkResult {
+public:
+	explicit ChunkResult(DataChunk &chunk_p, ChunkResultPushdownType pushdown_type_p) : pushdown_type(pushdown_type_p) {
+		chunk = make_uniq<DataChunk>();
+		chunk->InitializeEmpty(chunk_p.GetTypes());
+		chunk->Reference(chunk_p);
+	}
+	DataChunk &Chunk() {
+		return *chunk;
+	}
+	bool RequiresPushdown() const {
+		return pushdown_type == ChunkResultPushdownType::REQUIRES_PUSHDOWN;
+	}
+
+private:
+	unique_ptr<DataChunk> chunk;
+	ChunkResultPushdownType pushdown_type;
+};
+
 struct QuackScanLocalState : public LocalTableFunctionState {
 	unique_ptr<QuackClient> client;
 	//! batch_index of the batch that `fetched_results` currently holds chunks from (server-assigned).
@@ -127,7 +133,7 @@ struct QuackScanLocalState : public LocalTableFunctionState {
 	//! (CTAS, COPY TO, INSERT SELECT) can run the scan in parallel without losing order.
 	optional_idx current_batch_index;
 
-	queue<unique_ptr<DataChunkWrapper>> results;
+	queue<ChunkResult> results;
 	ColumnDataScanState scan_state;
 
 	explicit QuackScanLocalState() {
@@ -138,7 +144,7 @@ struct QuackScanLocalState : public LocalTableFunctionState {
 
 struct QuackScanGlobalState : GlobalTableFunctionState {
 	explicit QuackScanGlobalState(vector<ColumnIndex> column_ids_p, vector<idx_t> projection_id_p,
-	                              vector<unique_ptr<DataChunkWrapper>> results_p, bool needs_more_fetch_p)
+	                              vector<ChunkResult> results_p, bool needs_more_fetch_p)
 	    : max_threads(needs_more_fetch_p ? MAX_THREADS : 1), column_ids(std::move(column_ids_p)),
 	      projection_ids(std::move(projection_id_p)), needs_more_fetch(needs_more_fetch_p),
 	      results(std::move(results_p)) {
@@ -151,45 +157,15 @@ struct QuackScanGlobalState : GlobalTableFunctionState {
 	vector<idx_t> projection_ids;
 	atomic<bool> needs_more_fetch;
 
-	vector<unique_ptr<DataChunkWrapper>> TryGetResults() {
+	vector<ChunkResult> TryGetResults() {
 		lock_guard<mutex> guard(lock);
 		return std::move(results);
 	}
 
 private:
 	mutex lock;
-	vector<unique_ptr<DataChunkWrapper>> results;
+	vector<ChunkResult> results;
 };
-
-static bool CanPushdownFilter(const TableFilter &filter) {
-	switch (filter.filter_type) {
-	case TableFilterType::CONSTANT_COMPARISON:
-	case TableFilterType::IS_NULL:
-	case TableFilterType::IS_NOT_NULL:
-	case TableFilterType::IN_FILTER:
-		return true;
-	case TableFilterType::CONJUNCTION_AND: {
-		auto &conjunction = filter.Cast<ConjunctionAndFilter>();
-		for (auto &child : conjunction.child_filters) {
-			if (!CanPushdownFilter(*child)) {
-				return false;
-			}
-		}
-		return true;
-	}
-	case TableFilterType::CONJUNCTION_OR: {
-		auto &conjunction = filter.Cast<ConjunctionOrFilter>();
-		for (auto &child : conjunction.child_filters) {
-			if (!CanPushdownFilter(*child)) {
-				return false;
-			}
-		}
-		return true;
-	}
-	default:
-		return false;
-	}
-}
 
 static string BuildPushdownQuery(const QuackScanBindData &bind_data, const TableFunctionInitInput &input) {
 	string query;
@@ -197,7 +173,24 @@ static string BuildPushdownQuery(const QuackScanBindData &bind_data, const Table
 	// Projection: select only the columns DuckDB actually needs in the output.
 	// With filter_prune, projection_ids indexes into column_ids for output columns only.
 	// Filter-only columns are in column_ids but NOT in projection_ids — they go in WHERE, not SELECT.
-	// if (!input.column_ids.empty() && !bind_data.column_names.empty()) {
+	if (!input.column_indexes.empty()) {
+		for (auto &col_id : input.column_indexes) {
+			if (!query.empty()) {
+				query += ", ";
+			}
+			if (col_id.IsVirtualColumn()) {
+				auto virtual_column = col_id.GetPrimaryIndex();
+				if (virtual_column == COLUMN_IDENTIFIER_EMPTY || virtual_column == COLUMN_IDENTIFIER_ROW_ID) {
+					query += "NULL::BIGINT";
+				} else {
+					throw InternalException("Unsupported virtual column index");
+				}
+			} else {
+				query += "#" + to_string(col_id.GetPrimaryIndex() + 1);
+			}
+		}
+		query = "SELECT " + query + " ";
+	}
 	// 	vector<string> selected_columns;
 	// 	if (!input.projection_ids.empty()) {
 	// 		for (auto &proj_id : input.projection_ids) {
@@ -250,19 +243,26 @@ unique_ptr<GlobalTableFunctionState> QuackScanInitGlobal(ClientContext &context,
 	// For the catalog path (ATTACH), LookupEntry only prepares without executing
 	// to avoid the server-side result being overwritten by subsequent lookups.
 	// We execute the query here, right before scanning, so the result is fresh.
-	vector<unique_ptr<DataChunkWrapper>> results;
+	vector<ChunkResult> results;
 	bool needs_more_fetch = bind_data.needs_more_fetch;
 	if (!bind_data.table_name.empty()) {
+		// apply pushdown to the query
 		auto query = BuildPushdownQuery(bind_data, input);
-		auto client = QuackClient::GetClient(context, bind_data.server_uri);
-		auto response_message =
-		    client->Request<PrepareResponseMessage>(make_uniq<PrepareRequestMessage>(bind_data.connection_id, query));
+		auto &client_connection = *bind_data.client_connection;
+		auto client = client_connection.GetClient(context);
+		auto response_message = client->Request<PrepareResponseMessage>(
+		    context, make_uniq<PrepareRequestMessage>(client_connection.ConnectionId(), query));
 		needs_more_fetch = response_message->NeedsMoreFetch();
-		results = std::move(response_message->MutableResults());
+		// fetch the result
+		for (auto &chunk_ref : response_message->MutableResults()) {
+			auto &chunk = chunk_ref->Chunk();
+			results.emplace_back(chunk, ChunkResultPushdownType::PUSHDOWN_ALREADY_APPLIED);
+		}
+		client_connection.StoreClient(std::move(client));
 	} else {
 		for (auto &chunk_ref : bind_data.results) {
 			auto &chunk = chunk_ref->Chunk();
-			results.push_back(make_uniq<DataChunkWrapper>(chunk));
+			results.emplace_back(chunk, ChunkResultPushdownType::REQUIRES_PUSHDOWN);
 		}
 	}
 
@@ -278,10 +278,7 @@ unique_ptr<LocalTableFunctionState> QuackScanInitLocal(ExecutionContext &context
 	auto local_state = make_uniq<QuackScanLocalState>();
 
 	// re-use initial client from bind if possible
-	local_state->client = bind_data.TryGetInitialClient();
-	if (!local_state->client) {
-		local_state->client = QuackClient::GetClient(context.client, bind_data.server_uri);
-	}
+	local_state->client = bind_data.client_connection->GetClient(context.client);
 	auto results = global_state.TryGetResults();
 	for (auto &chunk : results) {
 		local_state->results.push(std::move(chunk));
@@ -296,49 +293,35 @@ static void QuackScan(ClientContext &context, TableFunctionInput &input, DataChu
 
 	while (true) {
 		// first we try to scan from our local results buffer if we have any
-		if (!local_state.results.empty()) {
+		while (!local_state.results.empty()) {
 			auto chunk = std::move(local_state.results.front());
 			local_state.results.pop();
 
-			auto &response_chunk = chunk->Chunk();
-			const auto &col_ids = global_state.column_ids;
-			const auto &proj_ids = global_state.projection_ids;
-			if (response_chunk.ColumnCount() == output.ColumnCount() && col_ids.empty() && proj_ids.empty()) {
-				output.Reference(response_chunk);
-			} else {
-				// Map each output column to the right response column. DuckDB's pushdown contract:
-				//   - column_ids lists which source columns the scan should read (in that order).
-				//   - projection_ids (when filter_prune=true) indexes into column_ids for the outputs.
-				// The server ignores pushdown and returns every column, so we apply both hops here.
-				for (idx_t i = 0; i < output.ColumnCount(); i++) {
-					ColumnIndex index;
-					if (!proj_ids.empty()) {
-						index = col_ids[proj_ids[i]];
-					} else if (!col_ids.empty()) {
-						index = col_ids[i];
-					} else {
-						index = ColumnIndex(i);
+			auto &response_chunk = chunk.Chunk();
+			if (response_chunk.size() > 0) {
+				if (!chunk.RequiresPushdown()) {
+					output.Reference(response_chunk);
+				} else {
+					for (idx_t i = 0; i < global_state.column_ids.size(); i++) {
+						auto &index = global_state.column_ids[i];
+						if (index.IsVirtualColumn()) {
+							// TODO
+							output.data[i].Reference(Value(output.data[i].GetType()));
+							return;
+						}
+						auto col_idx = index.GetPrimaryIndex();
+						output.data[i].Reference(response_chunk.data[col_idx]);
 					}
-					if (index.IsVirtualColumn()) {
-						// TODO
-						output.data[i].Reference(Value(output.data[i].GetType()));
-						return;
-					}
-					auto col_idx = index.GetPrimaryIndex();
-					D_ASSERT(col_idx < response_chunk.ColumnCount());
-					D_ASSERT(response_chunk.data[col_idx].GetType() == output.data[i].GetType());
-					output.data[i].Reference(response_chunk.data[col_idx]);
+					output.SetCardinality(response_chunk.size());
 				}
+				return;
 			}
-			output.SetCardinality(response_chunk.size());
-
-			return;
 		}
 
 		// if that did not work, we request more results
 		if (local_state.results.empty() && global_state.needs_more_fetch) {
 			auto fetch_response = local_state.client->Request<FetchResponseMessage>(
-			    make_uniq<FetchRequestMessage>(bind_data.connection_id));
+			    context, make_uniq<FetchRequestMessage>(bind_data.client_connection->ConnectionId()));
 
 			if (fetch_response->MutableResults().empty()) {
 				// server is done, we are done
@@ -347,7 +330,7 @@ static void QuackScan(ClientContext &context, TableFunctionInput &input, DataChu
 			}
 			// set up buffer for scan in next iteration
 			for (auto &chunk : fetch_response->MutableResults()) {
-				local_state.results.push(std::move(chunk));
+				local_state.results.emplace(chunk->Chunk(), ChunkResultPushdownType::PUSHDOWN_ALREADY_APPLIED);
 			}
 			local_state.current_batch_index = fetch_response->BatchIndex();
 			continue;
@@ -369,7 +352,7 @@ static OperatorPartitionData QuackScanGetPartitionData(ClientContext &, TableFun
 InsertionOrderPreservingMap<string> QuackScanToString(TableFunctionToStringInput &input) {
 	auto &bind_data = input.bind_data->Cast<QuackScanBindData>();
 	InsertionOrderPreservingMap<string> result;
-	result["Server"] = bind_data.server_uri.Uri();
+	result["Server"] = bind_data.client_connection->ServerURI().Uri();
 	return result;
 }
 

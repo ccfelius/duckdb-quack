@@ -9,47 +9,78 @@
 #include "quack_uri.hpp"
 
 namespace duckdb {
+class QuackClientConnection;
 
 class QuackClient {
 public:
-	explicit QuackClient(ClientContext &context_p, const QuackUri &uri_p) : context(context_p), uri(uri_p) {};
+	explicit QuackClient(DatabaseInstance &db_p, const QuackUri &uri_p) : db(db_p), uri(uri_p) {
+	}
+	virtual ~QuackClient() {
+	}
 
 	template <class TARGET>
-	unique_ptr<TARGET> Request(unique_ptr<QuackMessage> request_message) {
-		auto response_message = RequestInternal(std::move(request_message)).release();
+	unique_ptr<TARGET> Request(optional_ptr<ClientContext> context, unique_ptr<QuackMessage> request_message) {
+		auto response_message = RequestInternal(context, std::move(request_message));
 		if (response_message->Type() != TARGET::TYPE) {
 			if (response_message->Type() == MessageType::ERROR_RESPONSE) {
 				throw IOException("Expected %s message, got error message instead: %s",
 				                  MessageTypeToString(TARGET::TYPE),
-				                  response_message->Cast<ErrorMessage>().Error().c_str());
+				                  response_message->Cast<ErrorResponse>().ErrorMessage());
 			}
 			throw IOException("Expected %s message, got %s instead", MessageTypeToString(TARGET::TYPE),
 			                  MessageTypeToString(response_message->Type()));
 		}
-		return unique_ptr<TARGET>(reinterpret_cast<TARGET *>(response_message));
+		return unique_ptr_cast<QuackMessage, TARGET>(std::move(response_message));
 	}
 
+	static unique_ptr<QuackClient> GetClient(DatabaseInstance &db, const QuackUri &uri);
 	static unique_ptr<QuackClient> GetClient(ClientContext &context, const QuackUri &uri);
 
-	virtual ~QuackClient() {};
+	static shared_ptr<QuackClientConnection> ConnectToServer(ClientContext &context, const QuackUri &uri, string token);
 
 protected:
 	mutex request_mutex;
 	MemoryStream read_stream, write_stream;
-	ClientContext &context;
+	DatabaseInstance &db;
 	QuackUri uri;
 
 private:
-	virtual unique_ptr<QuackMessage> RequestInternal(unique_ptr<QuackMessage> request_message) = 0;
+	virtual unique_ptr<QuackMessage> RequestInternal(optional_ptr<ClientContext> context,
+	                                                 unique_ptr<QuackMessage> request_message) = 0;
+};
+
+class QuackClientConnection {
+public:
+	explicit QuackClientConnection(unique_ptr<QuackClient> client_p, QuackUri uri_p, string connection_id_p);
+	~QuackClientConnection();
+
+	const string &ConnectionId() const {
+		return connection_id;
+	}
+	const QuackUri &ServerURI() const {
+		return uri;
+	}
+
+	//! Get a client (either a cached one, or open a new one if required)
+	unique_ptr<QuackClient> GetClient(ClientContext &context) const;
+	//! Return a client back to the cache
+	void StoreClient(unique_ptr<QuackClient> client_p);
+
+private:
+	QuackUri uri;
+	string connection_id;
+	mutable mutex lock;
+	mutable vector<unique_ptr<QuackClient>> cached_clients;
 };
 
 class HttpsQuackClient : public QuackClient {
 public:
-	HttpsQuackClient(ClientContext &context, const QuackUri &uri_p);
+	HttpsQuackClient(DatabaseInstance &db, const QuackUri &uri_p);
 	~HttpsQuackClient() override;
 
 private:
-	unique_ptr<QuackMessage> RequestInternal(unique_ptr<QuackMessage> request_message) override;
+	unique_ptr<QuackMessage> RequestInternal(optional_ptr<ClientContext> context,
+	                                         unique_ptr<QuackMessage> request_message) override;
 
 private:
 	unique_ptr<HTTPParams> http_params;

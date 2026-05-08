@@ -1,6 +1,7 @@
 #include "storage/quack_transaction.hpp"
 
 #include "duckdb/common/printer.hpp"
+#include "duckdb/main/client_context.hpp"
 #include "storage/quack_catalog.hpp"
 
 namespace duckdb {
@@ -52,7 +53,12 @@ QuackTransaction &QuackTransaction::Get(CatalogTransaction transaction) {
 
 unique_ptr<ColumnDataCollection> QuackTransaction::Query(const string &query) {
 	ForceStart();
-	return quack_catalog.ExecuteCommandInternal(query);
+	auto context_ref = context.lock();
+	if (!context_ref) {
+		// context has been destroyed - silently ignore the query
+		return nullptr;
+	}
+	return quack_catalog.ExecuteCommandInternal(*context_ref, query);
 }
 
 } // namespace duckdb

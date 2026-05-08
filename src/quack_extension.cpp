@@ -144,9 +144,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
 	config.AddExtensionOption("quack_authentication_function", "Name of a callback function for authentication",
-	                          LogicalType::VARCHAR, Value("quack_check_token"));
+	                          LogicalType::VARCHAR, Value("quack_check_token"), nullptr, SetScope::GLOBAL);
 	config.AddExtensionOption("quack_authorization_function", "Name of a callback function for authorization",
-	                          LogicalType::VARCHAR, Value("quack_nop_authorization"));
+	                          LogicalType::VARCHAR, Value("quack_nop_authorization"), nullptr, SetScope::GLOBAL);
 
 	config.AddExtensionOption("quack_fetch_batch_chunks", "Maximum number of DataChunks returned per FETCH response",
 	                          LogicalType::UBIGINT, Value::UBIGINT(12));

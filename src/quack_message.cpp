@@ -48,8 +48,11 @@ MessageType EnumUtil::FromString<MessageType>(const char *value) {
 	if (StringUtil::Equals(value, "APPEND_REQUEST")) {
 		return MessageType::APPEND_REQUEST;
 	}
-	if (StringUtil::Equals(value, "APPEND_RESPONSE")) {
-		return MessageType::APPEND_RESPONSE;
+	if (StringUtil::Equals(value, "SUCCESS_RESPONSE")) {
+		return MessageType::SUCCESS_RESPONSE;
+	}
+	if (StringUtil::Equals(value, "DISCONNECT_MESSAGE")) {
+		return MessageType::DISCONNECT_MESSAGE;
 	}
 	if (StringUtil::Equals(value, "ERROR_RESPONSE")) {
 		return MessageType::ERROR_RESPONSE;
@@ -79,8 +82,10 @@ const char *EnumUtil::ToChars<MessageType>(MessageType value) {
 		return "FETCH_RESPONSE";
 	case MessageType::APPEND_REQUEST:
 		return "APPEND_REQUEST";
-	case MessageType::APPEND_RESPONSE:
-		return "APPEND_RESPONSE";
+	case MessageType::SUCCESS_RESPONSE:
+		return "SUCCESS_RESPONSE";
+	case MessageType::DISCONNECT_MESSAGE:
+		return "DISCONNECT_MESSAGE";
 	case MessageType::ERROR_RESPONSE:
 		return "ERROR_RESPONSE";
 
@@ -126,10 +131,12 @@ unique_ptr<QuackMessage> QuackMessage::Deserialize(Deserializer &deserializer, M
 		return FetchResponseMessage::Deserialize(deserializer);
 	case MessageType::APPEND_REQUEST:
 		return AppendRequestMessage::Deserialize(deserializer);
-	case MessageType::APPEND_RESPONSE:
-		return AppendResponseMessage::Deserialize(deserializer);
+	case MessageType::SUCCESS_RESPONSE:
+		return SuccessResponse::Deserialize(deserializer);
+	case MessageType::DISCONNECT_MESSAGE:
+		return DisconnectMessage::Deserialize(deserializer);
 	case MessageType::ERROR_RESPONSE:
-		return ErrorMessage::Deserialize(deserializer);
+		return ErrorResponse::Deserialize(deserializer);
 	default:
 		throw InternalException("Unsupported type for message deserialization");
 	}

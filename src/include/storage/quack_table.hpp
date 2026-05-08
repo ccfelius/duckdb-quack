@@ -18,6 +18,7 @@ class QuackSchemaCatalogEntry;
 class QuackTableSet : public QuackCatalogSet {
 public:
 	QuackTableSet(ClientContext &context, QuackSchemaCatalogEntry &parent, const QuackLoadCatalogData &load_data);
+	explicit QuackTableSet(QuackSchemaCatalogEntry &parent);
 
 	static string GetLoadQuery();
 

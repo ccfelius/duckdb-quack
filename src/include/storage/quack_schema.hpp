@@ -27,6 +27,7 @@ public:
 
 class QuackSchemaCatalogEntry : public SchemaCatalogEntry {
 public:
+	QuackSchemaCatalogEntry(Catalog &catalog_p, CreateSchemaInfo &info_p);
 	QuackSchemaCatalogEntry(ClientContext &context, Catalog &catalog_p, CreateSchemaInfo &info_p,
 	                        const QuackLoadCatalogData &load_data);
 	~QuackSchemaCatalogEntry() override;

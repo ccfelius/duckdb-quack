@@ -35,11 +35,16 @@ void QuackCatalogSet::DropEntry(const string &entry_name) {
 	entries.erase(entry_name);
 }
 
-optional_ptr<CatalogEntry> QuackCatalogSet::CreateEntry(unique_ptr<CatalogEntry> entry) {
+optional_ptr<CatalogEntry> QuackCatalogSet::CreateEntry(unique_ptr<CatalogEntry> entry, OnCreateConflict on_conflict) {
 	lock_guard<mutex> l(entry_lock);
 	auto &entry_name = entry->name;
-	auto inserted_entry = entries.insert(make_pair(entry_name, std::move(entry)));
-	return inserted_entry.first->second.get();
+	if (on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
+		entries[entry_name] = std::move(entry);
+		return entries[entry_name].get();
+	} else {
+		auto inserted_entry = entries.insert(make_pair(entry_name, std::move(entry)));
+		return inserted_entry.first->second.get();
+	}
 }
 
 } // namespace duckdb
