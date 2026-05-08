@@ -33,6 +33,12 @@ MessageType EnumUtil::FromString<MessageType>(const char *value) {
 	if (StringUtil::Equals(value, "PREPARE_RESPONSE")) {
 		return MessageType::PREPARE_RESPONSE;
 	}
+	if (StringUtil::Equals(value, "CANCEL_REQUEST")) {
+		return MessageType::CANCEL_REQUEST;
+	}
+	if (StringUtil::Equals(value, "CANCEL_RESPONSE")) {
+		return MessageType::CANCEL_RESPONSE;
+	}
 	if (StringUtil::Equals(value, "FETCH_REQUEST")) {
 		return MessageType::FETCH_REQUEST;
 	}
@@ -63,6 +69,10 @@ const char *EnumUtil::ToChars<MessageType>(MessageType value) {
 		return "PREPARE_REQUEST";
 	case MessageType::PREPARE_RESPONSE:
 		return "PREPARE_RESPONSE";
+	case MessageType::CANCEL_REQUEST:
+		return "CANCEL_REQUEST";
+	case MessageType::CANCEL_RESPONSE:
+		return "CANCEL_RESPONSE";
 	case MessageType::FETCH_REQUEST:
 		return "FETCH_REQUEST";
 	case MessageType::FETCH_RESPONSE:
@@ -106,6 +116,10 @@ unique_ptr<QuackMessage> QuackMessage::Deserialize(Deserializer &deserializer, M
 		return PrepareRequestMessage::Deserialize(deserializer);
 	case MessageType::PREPARE_RESPONSE:
 		return PrepareResponseMessage::Deserialize(deserializer);
+	case MessageType::CANCEL_REQUEST:
+		return CancelRequestMessage::Deserialize(deserializer);
+	case MessageType::CANCEL_RESPONSE:
+		return CancelResponseMessage::Deserialize(deserializer);
 	case MessageType::FETCH_REQUEST:
 		return FetchRequestMessage::Deserialize(deserializer);
 	case MessageType::FETCH_RESPONSE:

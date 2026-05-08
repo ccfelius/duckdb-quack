@@ -11,6 +11,8 @@ enum class MessageType : uint8_t {
 	CONNECTION_RESPONSE = 2,
 	PREPARE_REQUEST = 3,
 	PREPARE_RESPONSE = 4,
+	CANCEL_REQUEST = 5,
+	CANCEL_RESPONSE = 6,
 	FETCH_REQUEST = 7,
 	FETCH_RESPONSE = 8,
 	APPEND_REQUEST = 9,
@@ -299,6 +301,32 @@ public:
 
 	void Serialize(Serializer &serializer) const override;
 	static unique_ptr<AppendResponseMessage> Deserialize(Deserializer &deserializer);
+};
+
+class CancelRequestMessage : public QuackMessage {
+public:
+	static constexpr MessageType TYPE = MessageType::CANCEL_REQUEST;
+
+	explicit CancelRequestMessage(string connection_id_p) : QuackMessage(TYPE, std::move(connection_id_p)) {
+	}
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<CancelRequestMessage> Deserialize(Deserializer &deserializer);
+
+protected:
+	CancelRequestMessage() : QuackMessage(TYPE) {
+	}
+};
+
+class CancelResponseMessage : public QuackMessage {
+public:
+	static constexpr MessageType TYPE = MessageType::CANCEL_RESPONSE;
+
+	explicit CancelResponseMessage() : QuackMessage(TYPE) {
+	}
+
+	void Serialize(Serializer &serializer) const override;
+	static unique_ptr<CancelResponseMessage> Deserialize(Deserializer &deserializer);
 };
 
 class ErrorMessage : public QuackMessage {

@@ -31,6 +31,22 @@ unique_ptr<AppendResponseMessage> AppendResponseMessage::Deserialize(Deserialize
 	return result;
 }
 
+void CancelRequestMessage::Serialize(Serializer &serializer) const {
+}
+
+unique_ptr<CancelRequestMessage> CancelRequestMessage::Deserialize(Deserializer &deserializer) {
+	auto result = duckdb::unique_ptr<CancelRequestMessage>(new CancelRequestMessage());
+	return result;
+}
+
+void CancelResponseMessage::Serialize(Serializer &serializer) const {
+}
+
+unique_ptr<CancelResponseMessage> CancelResponseMessage::Deserialize(Deserializer &deserializer) {
+	auto result = duckdb::unique_ptr<CancelResponseMessage>(new CancelResponseMessage());
+	return result;
+}
+
 void ConnectionRequestMessage::Serialize(Serializer &serializer) const {
 	serializer.WritePropertyWithDefault<string>(1, "auth_string", auth_string);
 }

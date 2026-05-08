@@ -129,6 +129,7 @@ bool ServerSupportsMessage(MessageType type) {
 	case MessageType::PREPARE_REQUEST:
 	case MessageType::FETCH_REQUEST:
 	case MessageType::APPEND_REQUEST:
+	case MessageType::CANCEL_REQUEST:
 		return true;
 	default:
 		return false;
@@ -340,6 +341,11 @@ unique_ptr<QuackMessage> QuackServer::HandleMessageInternal(QuackMessage &receiv
 		collection.Append(append_request_message.AppendChunk());
 		connection.duckdb_connection->Append(*table_info, collection);
 		return make_uniq<AppendResponseMessage>();
+	}
+	case MessageType::CANCEL_REQUEST: {
+		auto &connection = *connection_p;
+		connection.duckdb_connection->Interrupt();
+		return make_uniq<CancelResponseMessage>();
 	}
 	default: {
 		return make_uniq<ErrorMessage>(

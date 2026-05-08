@@ -51,6 +51,16 @@
     ]
   },
   {
+    "class": "CancelRequestMessage",
+    "members": [
+    ]
+  },
+  {
+    "class": "CancelResponseMessage",
+    "members": [
+    ]
+  },
+  {
     "class": "AppendResponseMessage",
     "members": []
   },
