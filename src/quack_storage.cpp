@@ -55,6 +55,7 @@ vector<QuackConnectionSnapshot> QuackStorageExtensionInfo::GetActiveConnectionSn
 	std::lock_guard<std::mutex> lock(servers_mutex);
 	for (auto &[uri, server] : servers) {
 		for (auto &snapshot : server->GetActiveConnectionSnap()) {
+			snapshot.server_id = uri;
 			result.push_back(std::move(snapshot));
 		}
 	}

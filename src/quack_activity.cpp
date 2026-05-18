@@ -22,11 +22,11 @@ static string QueryStateToString(QuackQueryState state) {
 	}
 }
 
-struct QuacktivityData : FunctionData {
+struct QuackActivityData : FunctionData {
 	bool finished = false;
 
 	unique_ptr<FunctionData> Copy() const override {
-		auto result = make_uniq<QuacktivityData>();
+		auto result = make_uniq<QuackActivityData>();
 		result->finished = finished;
 		return result;
 	}
@@ -35,15 +35,16 @@ struct QuacktivityData : FunctionData {
 	}
 };
 
-static unique_ptr<FunctionData> QuacktivityBind(ClientContext &, TableFunctionBindInput &,
-                                                vector<LogicalType> &return_types, vector<string> &names) {
-	return_types = {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::TIMESTAMP};
-	names = {"connection_id", "query", "state", "query_started_at"};
-	return make_uniq<QuacktivityData>();
+static unique_ptr<FunctionData> QuackActivityBind(ClientContext &, TableFunctionBindInput &,
+                                                  vector<LogicalType> &return_types, vector<string> &names) {
+	return_types = {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR,
+	                LogicalType::TIMESTAMP};
+	names = {"server_id", "connection_id", "query", "state", "query_started_at"};
+	return make_uniq<QuackActivityData>();
 }
 
-static void QuacktivityScan(ClientContext &context, TableFunctionInput &input, DataChunk &output) {
-	auto &data = input.bind_data->CastNoConst<QuacktivityData>();
+static void QuackActivityScan(ClientContext &context, TableFunctionInput &input, DataChunk &output) {
+	auto &data = input.bind_data->CastNoConst<QuackActivityData>();
 	if (data.finished) {
 		return;
 	}
@@ -52,13 +53,14 @@ static void QuacktivityScan(ClientContext &context, TableFunctionInput &input, D
 
 	idx_t row = 0;
 	for (auto &snap : snapshots) {
-		output.SetValue(0, row, snap.session_id);
-		output.SetValue(1, row, snap.sql_query);
-		output.SetValue(2, row, Value(QueryStateToString(snap.query_state)));
+		output.SetValue(0, row, snap.server_id);
+		output.SetValue(1, row, snap.session_id);
+		output.SetValue(2, row, snap.sql_query);
+		output.SetValue(3, row, Value(QueryStateToString(snap.query_state)));
 		if (snap.query_state == QuackQueryState::IDLE) {
-			output.SetValue(3, row, Value(LogicalType::TIMESTAMP));
+			output.SetValue(4, row, Value(LogicalType::TIMESTAMP));
 		} else {
-			output.SetValue(3, row, Value::TIMESTAMP(snap.query_started_at));
+			output.SetValue(4, row, Value::TIMESTAMP(snap.query_started_at));
 		}
 		row++;
 	}
@@ -67,7 +69,7 @@ static void QuacktivityScan(ClientContext &context, TableFunctionInput &input, D
 }
 
 TableFunction QuacktivityFunction::GetFunction() {
-	return TableFunction("quacktivity", {}, QuacktivityScan, QuacktivityBind);
+	return TableFunction("quack_activity", {}, QuackActivityScan, QuackActivityBind);
 }
 
 } // namespace duckdb

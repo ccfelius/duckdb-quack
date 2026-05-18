@@ -18,7 +18,7 @@ call quack_serve({server}, token='asdf');
 
 # no connections yet
 query I con1
-select count(*) from quacktivity();
+select count(*) from quack_activity();
 ----
 0
 
@@ -27,7 +27,7 @@ statement ok con2
 attach {server} as rpc2 (token 'asdf');
 
 query I con1
-select state from quacktivity();
+select state from quack_activity();
 ----
 finished
 
@@ -39,12 +39,12 @@ from rpc2.fuu;
 42	43
 
 query I con1
-select count(*) from quacktivity();
+select count(*) from quack_activity();
 ----
 1
 
 query I con1
-select starts_with(query, 'SELECT') from quacktivity();
+select starts_with(query, 'SELECT') from quack_activity();
 ----
 true
 
@@ -55,7 +55,7 @@ statement ok con1
 attach {server} as rpc3 (token 'asdf');
 
 query I con1
-select count(*) from quacktivity();
+select count(*) from quack_activity();
 ----
 2
 
@@ -63,7 +63,7 @@ statement ok con1
 detach rpc3;
 
 query I con1
-select count(*) from quacktivity();
+select count(*) from quack_activity();
 ----
 1
 
@@ -72,7 +72,7 @@ statement ok con2
 detach rpc2;
 
 query I con1
-select count(*) from quacktivity();
+select count(*) from quack_activity();
 ----
 0
 

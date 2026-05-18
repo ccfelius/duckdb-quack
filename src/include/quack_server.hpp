@@ -40,6 +40,7 @@ struct QuackConnection {
 };
 
 struct QuackConnectionSnapshot {
+	string server_id;
 	string session_id;
 	string sql_query;
 	QuackQueryState query_state = QuackQueryState::IDLE;
