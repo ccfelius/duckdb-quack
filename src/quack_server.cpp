@@ -169,6 +169,7 @@ bool ServerSupportsMessage(MessageType type) {
 	case MessageType::FETCH_REQUEST:
 	case MessageType::APPEND_REQUEST:
 	case MessageType::DISCONNECT_MESSAGE:
+	case MessageType::CANCEL_REQUEST:
 		return true;
 	default:
 		return false;
@@ -417,6 +418,19 @@ unique_ptr<QuackMessage> QuackServer::HandleMessageInternal(DatabaseInstance &db
 			return make_uniq<ErrorResponse>(ErrorData(ex));
 		}
 		return make_uniq<SuccessResponse>();
+	}
+	case MessageType::CANCEL_REQUEST: {
+		auto &cancel_request_message = received_message.Cast<CancelRequestMessage>();
+		auto &connection = *connection_p;
+		std::unique_lock<std::mutex> lock(connection.lock);
+
+		if (connection.result_uuid != cancel_request_message.result_uuid) {
+			return make_uniq<ErrorResponse>("Result has been closed");
+		}
+		connection.duckdb_connection->Interrupt();
+		connection.duckdb_query_result.reset();
+		connection.query_state = QuackQueryState::CANCELLED;
+		return make_uniq<CancelResponseMessage>();
 	}
 	default: {
 		return make_uniq<ErrorResponse>(
