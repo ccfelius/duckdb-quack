@@ -3,6 +3,7 @@ add_subdirectory(storage)
 add_library(
   quack_library OBJECT
   quack_activity.cpp
+  quack_cancel.cpp
   quack_clear_cache.cpp
   quack_client.cpp
   quack_extension.cpp

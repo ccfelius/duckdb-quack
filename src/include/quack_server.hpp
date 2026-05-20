@@ -20,7 +20,7 @@ class DatabaseInstance;
 class PreparedStatement;
 class EncryptionState;
 
-enum class QuackQueryState : uint8_t { IDLE, ACTIVE, FINISHED, CANCELLED };
+enum class QuackQueryState : uint8_t { IDLE, ACTIVE, FINISHED, ERROR, CANCELLED };
 
 struct QuackConnection {
 	explicit QuackConnection(string session_id_p);
@@ -80,6 +80,7 @@ public:
 	static void ValidateToken(const string &token);
 
 	vector<QuackConnectionSnapshot> GetActiveConnectionSnap();
+	bool CancelConnection(const string &connection_id);
 
 	const string &Token() {
 		return token;

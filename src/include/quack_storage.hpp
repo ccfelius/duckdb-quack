@@ -31,6 +31,7 @@ public:
 
 	vector<ServerSnapshot> ListServers();
 	vector<QuackConnectionSnapshot> GetActiveConnectionSnaps();
+	bool CancelConnection(const string &connection_id);
 
 	static constexpr const char *STORAGE_EXTENSION_KEY = "quack";
 

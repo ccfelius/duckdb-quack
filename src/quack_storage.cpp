@@ -62,6 +62,16 @@ vector<QuackConnectionSnapshot> QuackStorageExtensionInfo::GetActiveConnectionSn
 	return result;
 }
 
+bool QuackStorageExtensionInfo::CancelConnection(const string &connection_id) {
+	std::lock_guard<std::mutex> lock(servers_mutex);
+	for (auto &[uri, server] : servers) {
+		if (server->CancelConnection(connection_id)) {
+			return true;
+		}
+	}
+	throw InvalidInputException("Connection id '%s' not found, or query could not be cancelled", connection_id.c_str());
+}
+
 bool QuackStorageExtensionInfo::StopServer(ClientContext &context, const QuackUri &listen_uri) {
 	unique_ptr<QuackServer> to_destroy;
 	{

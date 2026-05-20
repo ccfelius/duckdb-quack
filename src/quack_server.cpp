@@ -75,6 +75,16 @@ string QuackServer::CreateNewConnection(const string &session_id) {
 	return session_id;
 }
 
+bool QuackServer::CancelConnection(const string &connection_id) {
+	auto connection = GetConnection(connection_id);
+	if (!connection) {
+		throw InvalidInputException("No connection with id '%s' found", connection_id.c_str());
+	}
+	connection->duckdb_connection->Interrupt();
+	connection->query_state = QuackQueryState::CANCELLED;
+	return true;
+}
+
 bool QuackServer::DisconnectConnection(const string &session_id) {
 	std::lock_guard<std::mutex> lock(active_connections_mutex);
 
@@ -310,12 +320,12 @@ unique_ptr<QuackMessage> QuackServer::HandleMessageInternal(DatabaseInstance &db
 		{
 			auto query_result = connection.duckdb_connection->SendQuery(prepare_request_message.Query());
 			if (query_result->HasError()) {
-				connection.query_state = QuackQueryState::CANCELLED;
+				connection.query_state = QuackQueryState::ERROR;
 				connection.sql_query = "";
 				return make_uniq<ErrorResponse>(query_result->GetErrorObject());
 			}
 			if (query_result->names.empty()) {
-				connection.query_state = QuackQueryState::CANCELLED;
+				connection.query_state = QuackQueryState::ERROR;
 				connection.sql_query = "";
 				return make_uniq<ErrorResponse>("Query did not return any columns");
 			}
@@ -422,14 +432,11 @@ unique_ptr<QuackMessage> QuackServer::HandleMessageInternal(DatabaseInstance &db
 	case MessageType::CANCEL_REQUEST: {
 		auto &cancel_request_message = received_message.Cast<CancelRequestMessage>();
 		auto &connection = *connection_p;
-		std::unique_lock<std::mutex> lock(connection.lock);
-
 		if (connection.result_uuid != cancel_request_message.result_uuid) {
 			return make_uniq<ErrorResponse>("Result has been closed");
 		}
+		// No lock — Interrupt() sets an atomic flag, safe to call without connection->lock.
 		connection.duckdb_connection->Interrupt();
-		connection.duckdb_query_result.reset();
-		connection.query_state = QuackQueryState::CANCELLED;
 		return make_uniq<CancelResponseMessage>();
 	}
 	default: {
