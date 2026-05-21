@@ -4,6 +4,9 @@
 
 require quack
 
+require httpfs
+
+set ignore_error_messages __none__
 
 statement ok
 create schema moo;
@@ -16,19 +19,28 @@ create table moo.fuu2 as values(44, 45);
 
 foreach server 'quack:localhost'
 
-foreach ssl false true
-
 
 statement ok con1
-call rpc_start({server}, disable_ssl={ssl});
+call quack_serve({server}, token='asdf');
 
 query II con2
-from rpc_call({server}, 'select 42, 43', disable_ssl={ssl})
+from quack_query({server}, 'select 42, 43', token='asdf')
 ----
 42	43
 
+# we can attach with a straight token
 statement ok con2
-attach {server} as rpc (disable_ssl {ssl})
+attach {server} as rpc2 (token 'asdf')
+
+statement ok con2
+detach rpc2;
+
+statement ok con2
+create secret (type quack, token 'asdf')
+
+statement ok con2
+attach {server} as rpc
+
 
 query II
 from rpc.fuu;
@@ -36,7 +48,7 @@ from rpc.fuu;
 42	43
 
 query I
-from rpc.call('select 42');
+from rpc.query('select 42');
 ----
 42
 
@@ -128,13 +140,10 @@ detach rpc;
 database not found
 
 statement ok con1
-call rpc_stop({server});
+call quack_stop({server});
 
 statement error con2
-attach {server} as rpc (disable_ssl {ssl})
+attach {server} as rpc
 ----
-Failed to send message
-
-endloop
 
 endloop

@@ -4,15 +4,17 @@
 
 require quack
 
+require httpfs
+
+set ignore_error_messages __none__
+
 foreach server 'quack:localhost'
 
-foreach ssl false true
-
 statement ok con1
-call rpc_start({server}, disable_ssl={ssl});
+call quack_serve({server}, token='asdf');
 
 statement ok con2
-attach {server} as rpc (disable_ssl {ssl})
+attach {server} as rpc (token 'asdf')
 
 statement ok
 create table rpc.t as select range a from range(10);
@@ -29,8 +31,6 @@ statement ok con2
 detach rpc;
 
 statement ok con1
-call rpc_stop({server});
-
-endloop
+call quack_stop({server});
 
 endloop

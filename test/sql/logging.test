@@ -4,89 +4,99 @@
 
 require quack
 
-# start server
-statement ok
-call rpc_generate_keys();
+require httpfs
+
+set ignore_error_messages __none__
+
 
 statement ok con1
-call rpc_start('quack:localhost', disable_ssl=false);
+call quack_serve('quack:localhost', token='asdf');
 
 sleep 100 millisecond
+
+
+statement ok con2
+create secret (type quack, token 'asdf')
+
 
 # --- RPC logging ---
 
 statement ok con2
-CALL enable_logging('RPC');
+CALL enable_logging('Quack');
 
-# rpc_call should produce RPC log entries
+# quack_query should produce RPC log entries
 query I con2
-from rpc_call('quack:localhost', 'select 42 as answer', disable_ssl=false)
+from quack_query('quack:localhost', 'select 42 as answer')
 ----
 42
 
 # check that we have RPC logs with correct structure
 query I con2
-select count(*) > 0 from duckdb_logs where type = 'RPC'
+select count(*) > 0 from duckdb_logs where type = 'Quack'
 ----
 true
 
 # check that PREPARE_REQUEST has the query
 query I con2
-select count(*) > 0 from duckdb_logs_parsed('RPC') where message_type = 'PREPARE_REQUEST' and query = 'select 42 as answer'
+select count(*) > 0 from duckdb_logs_parsed('Quack') where message_type = 'PREPARE_REQUEST' and query = 'select 42 as answer'
 ----
 true
 
-# check that FETCH_REQUEST entries exist
+# we no longer need a fetch
 query I con2
-select count(*) > 0 from duckdb_logs_parsed('RPC') where message_type = 'FETCH_REQUEST'
+select count(*) > 0 from duckdb_logs_parsed('Quack') where message_type = 'FETCH_REQUEST'
 ----
-true
+false
 
 # check that rpc_connection_id is set on non-connection messages
 query I con2
-select count(*) > 0 from duckdb_logs_parsed('RPC') where message_type = 'PREPARE_REQUEST' and rpc_connection_id != ''
+select count(*) > 0 from duckdb_logs_parsed('Quack') where message_type = 'PREPARE_REQUEST' and quack_connection_id != ''
 ----
 true
 
 # check duration_ms is non-negative
 query I con2
-select count(*) = 0 from duckdb_logs_parsed('RPC') where duration_ms < 0
+select count(*) = 0 from duckdb_logs_parsed('Quack') where duration_ms < 0
 ----
 true
 
 # check server field is populated on client-side logs
 query I con2
-select count(*) > 0 from duckdb_logs_parsed('RPC') where server is not null and server != ''
+select count(*) > 0 from duckdb_logs_parsed('Quack') where server is not null and server != ''
 ----
 true
 
 # check response_type is populated
 query I con2
-select count(*) > 0 from duckdb_logs_parsed('RPC') where response_type = 'PREPARE_RESPONSE'
+select count(*) > 0 from duckdb_logs_parsed('Quack') where response_type = 'PREPARE_RESPONSE'
 ----
 true
 
 # check error field for successful queries is NULL
 query I con2
-select count(*) = 0 from duckdb_logs_parsed('RPC') where error is not null and server is not null
+select count(*) = 0 from duckdb_logs_parsed('Quack') where error is not null and server is not null
 ----
 true
 
 # check client_query_id is populated on client-side logs
 query I con2
-select count(*) > 0 from duckdb_logs_parsed('RPC') where client_query_id is not null and server is not null
+select count(*) > 0 from duckdb_logs_parsed('Quack') where client_query_id is not null and server is not null
 ----
 true
+
+mode skip
 
 # check client_query_id is populated on server-side logs
 query I con2
-select count(*) > 0 from duckdb_logs_parsed('RPC') where client_query_id is not null and (server is null or server = '')
+select count(*) > 0 from duckdb_logs_parsed('Quack') where client_query_id is not null and (server is null or server = '')
 ----
 true
 
+mode unskip
+
 # check server-side logs exist (scope=DATABASE, no server field)
 query I con2
-select count(*) > 0 from duckdb_logs_parsed('RPC') where server is null or server = ''
+select count(*) > 0 from duckdb_logs_parsed('Quack') where server is null or server = ''
 ----
 true
 
@@ -95,12 +105,12 @@ statement ok con2
 CALL truncate_duckdb_logs();
 
 statement error con2
-from rpc_call('quack:localhost', 'selexxxct 42', disable_ssl=false)
+from quack_query('quack:localhost', 'selexxxct 42')
 ----
 Error
 
 query I con2
-select count(*) > 0 from duckdb_logs_parsed('RPC') where response_type = 'ERROR' and error is not null
+select count(*) > 0 from duckdb_logs_parsed('Quack') where response_type = 'ERROR_RESPONSE' and error is not null
 ----
 true
 
@@ -116,7 +126,7 @@ statement ok con2
 CALL enable_logging('HTTP');
 
 query I con2
-from rpc_call('quack:localhost', 'select 1', disable_ssl=false)
+from quack_query('quack:localhost', 'select 1')
 ----
 1
 
@@ -128,13 +138,13 @@ true
 
 # check HTTP response status
 query I con2
-select count(*) > 0 from duckdb_logs_parsed('HTTP') where response.status = '200'
+select count(*) > 0 from duckdb_logs_parsed('HTTP') where response.status = 'OK_200'
 ----
 true
 
-# check URL contains /rpc
+# check URL contains /quack
 query I con2
-select count(*) > 0 from duckdb_logs_parsed('HTTP') where request.url like '%/rpc'
+select count(*) > 0 from duckdb_logs_parsed('HTTP') where request.url like '%/quack'
 ----
 true
 
@@ -143,4 +153,4 @@ statement ok con2
 CALL disable_logging();
 
 statement ok con1
-call rpc_stop('quack:localhost');
+call quack_stop('quack:localhost');

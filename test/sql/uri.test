@@ -4,48 +4,50 @@
 
 require quack
 
-query IIIII
-select unnest(rpc_uri_parser('quack:localhost', true));
-----
-localhost	1294	false	true	https://localhost:1294
+require httpfs
 
 query IIIII
-select unnest(rpc_uri_parser('quack:localhost', false));
+select unnest(quack_uri_parser('quack:localhost', true));
 ----
-localhost	1294	false	false	http://localhost:1294
+localhost	9494	false	true	https://localhost:9494
 
 query IIIII
-select unnest(rpc_uri_parser('quack://localhost', true));
+select unnest(quack_uri_parser('quack:localhost', false));
 ----
-localhost	1294	false	true	https://localhost:1294
+localhost	9494	false	false	http://localhost:9494
 
 query IIIII
-select unnest(rpc_uri_parser('quack:localhost:1234', true));
+select unnest(quack_uri_parser('quack://localhost', true));
+----
+localhost	9494	false	true	https://localhost:9494
+
+query IIIII
+select unnest(quack_uri_parser('quack:localhost:1234', true));
 ----
 localhost	1234	false	true	https://localhost:1234
 
 query IIIII
-select unnest(rpc_uri_parser('quack:otherhost', true));
+select unnest(quack_uri_parser('quack:otherhost', true));
 ----
-otherhost	1294	false	true	https://otherhost:1294
+otherhost	9494	false	true	https://otherhost:9494
 
 query IIIII
-select unnest(rpc_uri_parser('quack:127.0.0.1', true));
+select unnest(quack_uri_parser('quack:127.0.0.1', true));
 ----
-127.0.0.1	1294	false	true	https://127.0.0.1:1294
+127.0.0.1	9494	false	true	https://127.0.0.1:9494
 
 query IIIII
-select unnest(rpc_uri_parser('quack:127.0.0.1:1234', true));
+select unnest(quack_uri_parser('quack:127.0.0.1:1234', true));
 ----
 127.0.0.1	1234	false	true	https://127.0.0.1:1234
 
 query IIIII
-select unnest(rpc_uri_parser('quack:[::1]', true));
+select unnest(quack_uri_parser('quack:[::1]', true));
 ----
-::1	1294	true	true	https://[::1]:1294
+::1	9494	true	true	https://[::1]:9494
 
 query IIIII
-select unnest(rpc_uri_parser('quack:[::1]:1234', true));
+select unnest(quack_uri_parser('quack:[::1]:1234', true));
 ----
 ::1	1234	true	true	https://[::1]:1234
 
@@ -53,41 +55,41 @@ select unnest(rpc_uri_parser('quack:[::1]:1234', true));
 #failure cases
 
 statement error
-select unnest(rpc_uri_parser('', true));
+select unnest(quack_uri_parser('', true));
 ----
 Invalid DuckDB Quack RPC URI
 
 
 statement error
-select unnest(rpc_uri_parser('asdf', true));
+select unnest(quack_uri_parser('asdf', true));
 ----
 Invalid DuckDB Quack RPC URI
 
 statement error
-select unnest(rpc_uri_parser('quack:', true));
+select unnest(quack_uri_parser('quack:', true));
 ----
 Missing hostname
 
 
 statement error
-select unnest(rpc_uri_parser('quack::', true));
+select unnest(quack_uri_parser('quack::', true));
 ----
 Invalid Port
 
 
 statement error
-select unnest(rpc_uri_parser('quack:localhost:', true));
+select unnest(quack_uri_parser('quack:localhost:', true));
 ----
 Invalid Port
 
 
 statement error
-select unnest(rpc_uri_parser('quack:localhost:asdf', true));
+select unnest(quack_uri_parser('quack:localhost:asdf', true));
 ----
 Invalid Port
 
 
 statement error
-select unnest(rpc_uri_parser('quack:[::1', true));
+select unnest(quack_uri_parser('quack:[::1', true));
 ----
 Invalid IPv6 URL

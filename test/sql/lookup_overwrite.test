@@ -4,6 +4,10 @@
 
 require quack
 
+require httpfs
+
+set ignore_error_messages __none__
+
 statement ok con1
 create table t1 as select range i from range(100);
 
@@ -12,13 +16,18 @@ create table t2 as select range j from range(200);
 
 foreach server 'quack:localhost'
 
-foreach ssl false true
+foreach ssl true
 
 statement ok con1
-call rpc_start({server}, disable_ssl={ssl});
+call quack_serve({server}, token='asdf');
+
 
 statement ok con2
-attach {server} as rpc (disable_ssl {ssl})
+create secret (type quack, token 'asdf')
+
+
+statement ok con2
+attach {server} as rpc
 
 # Single table scan should work
 query I
@@ -34,16 +43,16 @@ select count(j) from rpc.main.t2;
 # Two RPC tables in the same query: both call LookupEntry on the same
 # connection_id during planning. The second PREPARE overwrites the first's
 # server-side query result, so the first table's scan fetches 0 rows.
-query II
+statement error
 select count(t1.i), count(t2.j) from rpc.main.t1, rpc.main.t2;
 ----
-20000	20000
+not currently supported
 
 statement ok con2
 detach rpc;
 
 statement ok con1
-call rpc_stop({server});
+call quack_stop({server});
 
 endloop
 

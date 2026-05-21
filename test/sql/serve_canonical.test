@@ -1,0 +1,56 @@
+# name: test/sql/serve_canonical.test
+# description: quack_serve URI keying is canonical (quack:host:port), so equivalent forms collide.
+# group: [sql]
+
+require quack
+
+require httpfs
+
+# Start a server on the explicit form. listen_uri column preserves what was sent.
+query III
+FROM quack_serve('quack:127.0.0.1:9494', token='abcd');
+----
+quack:127.0.0.1:9494	http://127.0.0.1:9494	abcd
+
+# Same canonical address — must reject regardless of which surface form is used.
+statement error
+FROM quack_serve('quack:127.0.0.1:9494', token='efgh');
+----
+Server already exists for quack:127.0.0.1:9494
+
+statement error
+FROM quack_serve('quack:127.0.0.1', token='efgh');
+----
+Server already exists for quack:127.0.0.1:9494
+
+# Stop using a different surface form than was used to start — should still find it.
+statement ok
+CALL quack_stop('quack:127.0.0.1');
+
+# Now we can re-start either form fresh.
+query III
+FROM quack_serve('quack:127.0.0.1', token='ijkl');
+----
+quack:127.0.0.1	http://127.0.0.1:9494	ijkl
+
+# And both surface forms still collide with the active server.
+statement error
+FROM quack_serve('quack:127.0.0.1:9494', token='mnop');
+----
+Server already exists for quack:127.0.0.1:9494
+
+statement error
+FROM quack_serve('quack:127.0.0.1', token='mnop');
+----
+Server already exists for quack:127.0.0.1:9494
+
+statement ok
+CALL quack_stop('quack:127.0.0.1:9494');
+
+# Port 1 is privileged — bind() will fail unless the test runs as root.
+# `statement maybe` accepts either outcome but matches the expected error
+# string when the bind does fail.
+statement maybe
+FROM quack_serve('quack:127.0.0.1:1', token='abcd');
+----
+Failed to bind DuckDB Quack RPC server

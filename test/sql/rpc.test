@@ -4,151 +4,150 @@
 
 require quack
 
-require json
+require httpfs
+
+set ignore_error_messages __none__
 
 foreach server 'quack:localhost'
 
-foreach ssl false true
 
-
-statement ok con1
-call rpc_start({server}, disable_ssl={ssl});
-
+query III con1
+call quack_serve({server}, token='asdf');
+----
+quack:localhost	http://localhost:9494	asdf
 
 sleep 100 millisecond
 
-
+# we can use the direct token param
 query I con2
-from rpc_call({server}, 'select 42', disable_ssl={ssl})
+from quack_query({server}, 'select 42', token='asdf')
 ----
 42
 
-#
-# statement error con2
-# from rpc_call({server}, 'select 42', disable_ssl=(NOT {ssl}))
-# ----
-# xxxx
+# we fail with the wrong token
+statement error con2
+from quack_query({server}, 'select 42', token='fdsa')
+----
+Authentication failed
+
+# or a secret
+statement ok con2
+create secret (type quack, token 'asdf')
+
+query I con2
+from quack_query({server}, 'select 42')
+----
+42
+
+# we return the last result set - for now
+query I con2
+from quack_query({server}, 'select 42; select 43')
+----
+42
+
+query I con2
+from quack_query({server}, 'set variable x=44; select getvariable(''x'')')
+----
+44
+
+# we can run whole goddamn transactions in here
+query I con2
+from quack_query({server}, 'create table fuu2 (i integer); begin transaction; insert into fuu2 values(45); rollback; from fuu2')
+----
+
 
 statement error con2
-from rpc_call({server}, '', disable_ssl={ssl})
+from quack_query({server}, '')
 ----
 Error
 
 
 statement error con2
-from rpc_call({server}, 'selexxxct 42', disable_ssl={ssl})
+from quack_query({server}, NULL)
+----
+Error
+
+
+statement error con2
+from quack_query({server}, 'selexxxct 42')
 ----
 Error
 
 query I con2
-select max(range) from rpc_call({server}, 'from range(100000)', disable_ssl={ssl})
+select max(range) from quack_query({server}, 'from range(100000)')
 ----
 99999
 
 statement ok con2
-from rpc_call({server}, 'from test_all_types()', disable_ssl={ssl})
+from quack_query({server}, 'from test_all_types()')
 
 
 statement ok con2
-from rpc_call({server}, 'create table fuu(i integer)', disable_ssl={ssl})
+from quack_query({server}, 'create table fuu(i integer)')
 
 statement ok con2
-from rpc_call({server}, 'insert into fuu values (42)', disable_ssl={ssl})
+from quack_query({server}, 'insert into fuu values (42)')
 
 query I ok con2
-from rpc_call({server}, 'from fuu', disable_ssl={ssl})
+from quack_query({server}, 'from fuu')
 ----
 42
 
+statement error con2
+from quack_query({server}, 'from yyyy')
+----
+does not exist
+
 statement ok con2
-from rpc_call({server}, 'drop table fuu', disable_ssl={ssl})
+from quack_query({server}, 'drop table fuu')
 
 # some error cases
 statement error con2
-from rpc_call({server}, NULL, disable_ssl={ssl})
+from quack_query({server}, NULL)
 ----
 cannot be NULL
 
 statement error con2
-from rpc_call(NULL, '', disable_ssl={ssl})
+from quack_query(NULL, '')
 ----
 cannot be NULL
 
-statement error con1
-call rpc_start()
-----
-Binder Error
 
 statement error con1
-call rpc_start('')
+call quack_serve('')
 ----
 Invalid listen string
 
 statement error con1
-call rpc_start(NULL)
+call quack_serve(NULL)
 ----
 Invalid listen string
 
-
 statement ok con2
-from rpc_call({server}, 'select 42', disable_ssl={ssl})
-
-
-# this very involved method makes sure we get some cardinalities
-statement ok con1
-create table my_range as from range(4242)
-
-statement ok con2
-set enable_profiling='json'
-
-statement ok con2
-set profiling_output='{TEST_DIR}/profile_cardinality_1.json'
-
-statement ok con2
-from rpc_call({server}, 'from my_range', disable_ssl={ssl})
-
-statement ok con2
-set enable_profiling='no_output'
-
-query I con2
-from read_json('{TEST_DIR}/profile_cardinality_1.json') select children[1].extra_info."Estimated Cardinality"::INT ec
-----
-4242
-
-statement ok con2
-set enable_profiling='json'
-
-statement ok con2
-set profiling_output='{TEST_DIR}/profile_cardinality_2.json'
-
-statement ok con2
-from rpc_call({server}, 'from my_range limit 2121', disable_ssl={ssl})
-
-statement ok con2
-set enable_profiling='no_output'
-
-query I con2
-from read_json('{TEST_DIR}/profile_cardinality_2.json') select children[1].extra_info."Estimated Cardinality"::INT ec
-----
-2121
-
-statement ok con1
-drop table my_range
-# end involved method
-
+from quack_query({server}, 'select 42')
 
 statement ok con 1
-call rpc_stop({server})
+call quack_stop({server})
 
 statement ok con 1
-call rpc_stop({server})
-
+call quack_stop({server})
 
 statement error con2
-from rpc_call({server}, 'select 42', disable_ssl={ssl})
+from quack_query({server}, 'select 42')
 ----
 IO Error
 
-endloop
+# we can call quack_serve() without parameters and connect using just quack:localhost
+statement ok
+SET VARIABLE token=(FROM quack_serve() SELECT auth_token);
+
+query I
+FROM quack_query('quack:localhost', 'select 42', token=getvariable('token'))
+----
+42
+
+statement ok
+call quack_stop('quack:localhost')
 
 endloop
+

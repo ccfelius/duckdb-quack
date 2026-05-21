@@ -1,0 +1,36 @@
+# name: test/sql/pragma_crash.test
+# description: USE on RPC catalog then PRAGMA should not crash (optional_idx with no active query)
+# group: [sql]
+
+require quack
+
+require httpfs
+
+set ignore_error_messages __none__
+
+foreach server 'quack:localhost:20118'
+
+foreach ssl true
+
+statement ok con1
+call quack_serve({server}, token='1234');
+
+statement ok con2
+create or replace secret q2 (TYPE quack, SCOPE {server}, TOKEN '1234');
+
+statement ok con2
+attach {server} as rpc
+
+statement ok con2
+use rpc;
+
+# This should not crash with optional_idx error
+statement ok con2
+pragma version;
+
+statement ok con1
+call quack_stop({server});
+
+endloop
+
+endloop
