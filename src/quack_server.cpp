@@ -78,7 +78,7 @@ string QuackServer::CreateNewConnection(const string &session_id) {
 bool QuackServer::CancelConnection(const string &connection_id) {
 	auto connection = GetConnection(connection_id);
 	if (!connection) {
-		throw InvalidInputException("No connection with id '%s' found", connection_id.c_str());
+		return false;
 	}
 	connection->duckdb_connection->Interrupt();
 	connection->query_state = QuackQueryState::CANCELLED;
@@ -432,11 +432,13 @@ unique_ptr<QuackMessage> QuackServer::HandleMessageInternal(DatabaseInstance &db
 	case MessageType::CANCEL_REQUEST: {
 		auto &cancel_request_message = received_message.Cast<CancelRequestMessage>();
 		auto &connection = *connection_p;
-		if (connection.result_uuid != cancel_request_message.result_uuid) {
+		// zero UUID = admin cancel from quack_cancel(), skip result check
+		if (cancel_request_message.result_uuid != hugeint_t {0, 0} &&
+		    connection.result_uuid != cancel_request_message.result_uuid) {
 			return make_uniq<ErrorResponse>("Result has been closed");
 		}
-		// No lock — Interrupt() sets an atomic flag, safe to call without connection->lock.
 		connection.duckdb_connection->Interrupt();
+		connection.query_state = QuackQueryState::CANCELLED;
 		return make_uniq<CancelResponseMessage>();
 	}
 	default: {

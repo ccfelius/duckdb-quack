@@ -62,8 +62,10 @@ vector<QuackConnectionSnapshot> QuackStorageExtensionInfo::GetActiveConnectionSn
 	return result;
 }
 
-bool QuackStorageExtensionInfo::CancelConnection(const string &connection_id) {
+bool QuackStorageExtensionInfo::CancelConnection(const string &server_id, const string &connection_id) {
 	std::lock_guard<std::mutex> lock(servers_mutex);
+	// not for every server, but also give the server ID
+	// check if the server ID corresponds
 	for (auto &[uri, server] : servers) {
 		if (server->CancelConnection(connection_id)) {
 			return true;
